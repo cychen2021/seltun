@@ -3,6 +3,7 @@
 The command-line interface lives in the :mod:`seltun.cli` package; ``main`` is the console-script entry point. The daemon itself is the Rust binary ``seltund`` (``native/daemon/``).
 """
 
+from ._version import __version__
 from .cli import app, main
 
-__all__ = ["app", "main"]
+__all__ = ["__version__", "app", "main"]

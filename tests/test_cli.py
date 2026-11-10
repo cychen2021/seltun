@@ -212,3 +212,13 @@ def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeyp
     assert result.exit_code == 0 and "already exists" in result.output
     assert config.read_text(encoding="utf-8") == "# mine"
     assert fetched == [binary.parent]
+
+
+def test_version_option(env):
+    from seltun import __version__
+
+    _, _, invoke = env
+    result = invoke("--version")
+    assert result.exit_code == 0
+    assert result.output.strip() == f"seltun {__version__}"
+    assert __version__ != "0.0.0+unknown"

@@ -19,6 +19,7 @@ import typer
 from .. import autostart as autostart_
 from .. import daemon as daemon_
 from .. import paths
+from .._version import __version__
 from ..config import EXAMPLE_CONFIG, Config
 from ..control import request
 from ..drivers import ensure_wintun
@@ -62,6 +63,12 @@ class Context:
         return self.config.daemon.host_port
 
 
+def _show_version(value: bool) -> None:
+    if value:
+        typer.echo(f"seltun {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def _root(
     ctx: typer.Context,
@@ -78,6 +85,13 @@ def _root(
         show_default=False,
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Log debug detail."),
+    _version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_show_version,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
 ) -> None:
     """Steer selected processes into a TUN adapter and forward them to Clash."""
     console.configure(verbose)

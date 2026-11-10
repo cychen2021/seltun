@@ -61,6 +61,7 @@ format.py / type_check.py
 - **Run the gate after significant changes**: `format.py` then `type_check.py`.
 - **Imports: at most two leading dots.** Use relative imports up to `..` only; anything that would need `...` uses the absolute path instead.
 - **Don't use hard line wraps** except in doc comments in source code or where explicitly required — one line per paragraph everywhere else, including EVERY markdown file, TOML comments, and commit-message bullets. `MD013` is switched off in `.markdownlint-cli2.jsonc` for this reason.
+- **Version lives in two places**: `version` in `pyproject.toml` (what `seltun --version` shows, via `src/seltun/_version.py`) and `[workspace.package].version` in `native/Cargo.toml` (what `seltund --version` shows). Bump both together.
 - **Config is read twice** (Python `config.py`, Rust `config.rs`) with the same defaults and the same strictness (unknown keys rejected); change both together.
 - **Commit messages** follow `.vscode/commit-general.instructions.md` (English; headline a capitalized verb < 10 words, no trailing period; blank line before the body; backtick `code_item` and `path/filename`; prefer "moved"/"renamed" over delete+add; avoid vague verbs like "refactor"/"improve" unless nothing fits; one line for minor changes).
 - **Docs live in `docs/`, named `snake_case.md`**, and every one is listed in [docs/index.md](docs/index.md). A new page means a new index row.
