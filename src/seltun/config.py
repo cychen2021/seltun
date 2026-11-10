@@ -22,8 +22,13 @@ __all__ = [
     "UpstreamConfig",
 ]
 
-#: The template ``seltun init`` copies; shipped inside the package.
-EXAMPLE_CONFIG = Path(__file__).with_name("config.example.toml")
+#: The template ``seltun init`` copies. It lives at the repo root; the wheel build (``hatch_build.py``) copies it into the package, so an installed seltun finds it beside this file and a checkout finds it at the root.
+_PACKAGED = Path(__file__).with_name("config.example.toml")
+EXAMPLE_CONFIG = (
+    _PACKAGED
+    if _PACKAGED.is_file()
+    else Path(__file__).parents[2] / "config.example.toml"
+)
 
 
 def _host_port(what: str, text: str) -> tuple[str, int]:

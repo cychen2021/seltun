@@ -1,6 +1,6 @@
 """Hatch build hook: compile ``seltund`` and ship it, with ``wintun.dll``, inside the wheel.
 
-The daemon is a Rust binary (``native/daemon/``). A regular wheel build runs ``cargo build --release`` and places the binary and the pinned Wintun driver DLL at ``seltun/bin/``, where ``seltun`` looks first; the wheel is tagged for this platform. An editable install (``uv sync``) skips all of that: ``seltun`` then falls back to ``native/target/release/``, which ``cargo build --release`` keeps current, and ``seltun setup`` fetches the DLL next to it.
+The daemon is a Rust binary (``native/daemon/``). A regular wheel build runs ``cargo build --release`` and places the binary and the pinned Wintun driver DLL (plus `config.example.toml`) at ``seltun/bin/``, where ``seltun`` looks first; the wheel is tagged for this platform. An editable install (``uv sync``) skips all of that: ``seltun`` then falls back to ``native/target/release/``, which ``cargo build --release`` keeps current, and ``seltun setup`` fetches the DLL next to it.
 """
 
 from __future__ import annotations
@@ -49,6 +49,9 @@ class CustomBuildHook(BuildHookInterface):
             check=True,
         )
         target = Path(os.environ.get("CARGO_TARGET_DIR") or root / "native" / "target")
+        build_data["force_include"][str(root / "config.example.toml")] = (
+            "seltun/config.example.toml"
+        )
         build_data["force_include"][str(target / "release" / DAEMON_EXE)] = (
             f"seltun/bin/{DAEMON_EXE}"
         )

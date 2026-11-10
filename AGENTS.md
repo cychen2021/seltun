@@ -41,7 +41,6 @@ Running the daemon for real needs an **elevated** terminal (Wintun adapter, rout
 docs/                    # per-topic reference (see docs/index.md)
 src/seltun/
   config.py              # config.toml loader (mirrors native/daemon/src/config.rs)
-  config.example.toml    # packaged template that `seltun init` copies
   state.py               # state.json: the persisted on/off switch
   paths.py               # per-user config/data/log locations
   control.py             # client of the daemon's control channel
@@ -52,7 +51,8 @@ src/seltun/
   support/               # console output (loguru), error types
 native/daemon/src/       # seltund (Rust): config, state, matcher, socks (Clash client), forward (data path), daemon (reconcile), control, platform (Windows glue)
 tests/                   # pytest
-hatch_build.py           # build hook: compile the daemon, fetch Wintun, into the wheel
+config.example.toml      # annotated config template; `seltun init` copies it (the wheel bundles it)
+hatch_build.py           # build hook: compile the daemon, fetch Wintun, bundle the template, into the wheel
 format.py / type_check.py
 ```
 
