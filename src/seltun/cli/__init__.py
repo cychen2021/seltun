@@ -203,7 +203,7 @@ def status(
     ctx: typer.Context,
     as_json: bool = typer.Option(False, "--json", help="Show machine-readable output."),
 ) -> None:
-    """Show the saved switch, the state of the daemon, and the startup task."""
+    """Show the saved switch, the state of the daemon, and the autostart task."""
     c: Context = ctx.obj
     with handle_errors():
         persisted = State.load(c.state_path)
@@ -211,35 +211,35 @@ def status(
             daemon = request(c.control, "status")
         except DaemonNotRunning:
             daemon = None
-        startup = autostart_.registered()
+        autostart = autostart_.registered()
     if as_json:
         typer.echo(
             json.dumps(
-                {"state": asdict(persisted), "daemon": daemon, "startup": startup},
+                {"state": asdict(persisted), "daemon": daemon, "autostart": autostart},
                 indent=2,
             )
         )
         return
     typer.echo(
-        f"switch   {'on' if persisted.enabled else 'off'} (saved in {c.state_path})"
+        f"switch    {'on' if persisted.enabled else 'off'} (saved in {c.state_path})"
     )
     if daemon is None:
-        typer.echo("daemon   not running (`seltun daemon start`)")
+        typer.echo("daemon    not running (`seltun daemon start`)")
     else:
         typer.echo(
-            f"daemon   running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
+            f"daemon    running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
         )
-        typer.echo(f"steering {'active' if daemon['active'] else 'inactive'}")
-        typer.echo(f"upstream {daemon['upstream']}")
-        typer.echo(f"selected {', '.join(daemon['processes']) or '(none)'}")
+        typer.echo(f"steering  {'active' if daemon['active'] else 'inactive'}")
+        typer.echo(f"upstream  {daemon['upstream']}")
+        typer.echo(f"selected  {', '.join(daemon['processes']) or '(none)'}")
         if daemon["error"]:
-            typer.echo(f"problem  {daemon['error']}")
-    typer.echo(f"startup  {_autostart_summary(startup)}")
+            typer.echo(f"problem   {daemon['error']}")
+    typer.echo(f"autostart {_autostart_summary(autostart)}")
 
 
 @daemon_app.command("start")
 def daemon_start(ctx: typer.Context) -> None:
-    """Start the daemon. If the startup task is installed, the task starts the daemon with administrator rights."""
+    """Start the daemon. If the autostart task is installed, the task starts the daemon with administrator rights."""
     c: Context = ctx.obj
     with handle_errors():
         try:
@@ -259,11 +259,11 @@ def daemon_start(ctx: typer.Context) -> None:
                 except DaemonNotRunning:
                     if time.monotonic() > deadline:
                         raise SeltunError(
-                            f"The startup task ran, but the daemon does not answer. See {paths.daemon_log()}."
+                            f"The autostart task ran, but the daemon does not answer. See {paths.daemon_log()}."
                         ) from None
                     time.sleep(0.3)
             print_success(
-                f"The startup task started the daemon. seltun is {_summary(status)}"
+                f"The autostart task started the daemon. seltun is {_summary(status)}"
             )
             return
         argv = daemon_.command(c.config_path, c.state_path, paths.daemon_log())
@@ -317,7 +317,7 @@ def autostart_disable() -> None:
     if removed:
         print_success("The daemon does not start at login.")
     else:
-        print_info("The startup task was not installed.")
+        print_info("The autostart task was not installed.")
 
 
 def _autostart_summary(line: str | None) -> str:

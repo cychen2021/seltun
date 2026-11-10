@@ -80,7 +80,7 @@ def task_xml(user: str, argv: list[str]) -> str:
 def enable(argv: list[str]) -> str:
     """Register the logon task for ``argv``. The code replaces an existing task. Return the command line that the task runs."""
     if not is_admin():
-        raise SeltunError("To create the startup task, use an elevated terminal.")
+        raise SeltunError("To create the autostart task, use an elevated terminal.")
     domain = os.environ.get("USERDOMAIN", "")
     user = f"{domain}\\{getpass.getuser()}" if domain else getpass.getuser()
     with tempfile.TemporaryDirectory() as tmp:
@@ -97,7 +97,7 @@ def disable() -> bool:
     if registered() is None:
         return False
     if not is_admin():
-        raise SeltunError("To remove the startup task, use an elevated terminal.")
+        raise SeltunError("To remove the autostart task, use an elevated terminal.")
     result = _schtasks("/Delete", "/TN", NAME, "/F")
     if result.returncode != 0:
         raise _failure(result)

@@ -32,11 +32,11 @@ These commands are also available:
 
 | Command | Result |
 | --- | --- |
-| `seltun status` | Shows the switch, the daemon, the startup task, and the problem if there is one. |
+| `seltun status` | Shows the switch, the daemon, the autostart task, and the problem if there is one. |
 | `seltun daemon run` | Runs the daemon in the foreground. Use an elevated terminal. |
 | `seltun daemon stop` | Stops the daemon. The switch keeps its state. |
 | `seltun daemon reload` | Makes the daemon read the config file and the switch again. |
-| `seltun autostart disable` | Removes the startup task. Use an elevated terminal. |
+| `seltun autostart disable` | Removes the autostart task. Use an elevated terminal. |
 | `seltun --version` | Shows the version. |
 
 The proxy sees all forwarded traffic as traffic of the process `seltund.exe`. The value of `[upstream].address` is the address of the proxy. The default value is 127.0.0.1:1080.
