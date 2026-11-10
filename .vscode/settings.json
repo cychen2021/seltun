@@ -1,0 +1,21 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        ".worktrees": true
+    },
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        {
+            "file": ".vscode/commit-general.instructions.md"
+        }
+    ],
+    "chat.useAgentsMdFile": true,
+    "search.useIgnoreFiles": true,
+    "python.analysis.exclude": [
+        "**/node_modules", "**/__pycache__", "**/.*", ".venv"
+    ],
+    "git.detectSubmodulesLimit": 1,
+    "editor.detectIndentation": true,
+    "editor.tabSize": 4
+}

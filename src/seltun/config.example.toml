@@ -1,0 +1,23 @@
+# Config for `seltun` and its daemon `seltund`. `seltun init` copies this template to the per-user config path (`%APPDATA%\seltun\config.toml` on Windows); edit that copy. Holds no secrets; the on/off switch lives in the data directory (`%LOCALAPPDATA%\seltun\state.json`).
+
+[processes]
+# The processes to steer, by executable file name (`chrome.exe`) or by full path (`C:\Program Files\App\app.exe`); case-insensitive. Everything else on the system is left alone, though while seltun is on it passes through the daemon. Nothing is steered until you list something here.
+names = []
+
+[upstream]
+# Where the selected processes' traffic is sent: Clash Verge's mixed port (SOCKS5 + HTTP).
+address = "127.0.0.1:7897"
+# "socks5" or "http" (`http` carries TCP only).
+protocol = "socks5"
+# Send the selected processes' UDP through Clash too (needs `protocol = "socks5"` and a Clash proxy that supports UDP). When false, their DNS goes direct and their other UDP is dropped, so applications fall back to TCP.
+udp = false
+
+[tun]
+# Name and address of the TUN adapter the daemon creates while seltun is on. The address must not collide with a network you use; 198.19.0.0/16 is reserved for benchmarking and unused in practice (Clash's own TUN defaults to 198.18.0.0/16).
+name = "seltun"
+address = "198.19.0.1"
+mtu = 1500
+
+[daemon]
+# Loopback address the CLI uses to control the daemon.
+control = "127.0.0.1:7898"

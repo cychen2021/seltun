@@ -1,0 +1,35 @@
+# Python / virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# Build outputs
+build/
+dist/
+native/target/
+src/seltun/bin/
+
+# Tooling caches
+.cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+
+# Logs
+*.log
+
+# Scratch
+tmp*/
+x_*
+
+# OS
+.DS_Store
+
+# Local config; `config.example.toml` is the committed template
+config.toml
+
+/.claude/*
+!/.claude/skills
+!/.claude/settings.json
+*.swp
+.worktrees/

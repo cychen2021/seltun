@@ -1,0 +1,21 @@
+{
+  // Markdown lint/format config for `format.py` (markdownlint-cli2 --fix).
+  "config": {
+    "MD013": false, // line-length: prose/code lines aren't wrapped to 80
+    "MD024": { "siblings_only": true }, // allow repeated headings under different parents
+    "MD033": false, // inline HTML is fine in docs
+    "MD041": false, // first line need not be a top-level heading
+    "MD060": false // table-column-style: pipe spacing isn't auto-fixed; cosmetic
+  },
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    ".venv/**",
+    ".claude/**",
+    "**/node_modules/**",
+    "**/.pytest_cache/**",
+    "x_*", // scratch / gitignored notes — not linted
+    "x_*/**"
+  ]
+}

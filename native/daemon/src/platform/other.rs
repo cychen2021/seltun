@@ -1,0 +1,44 @@
+//! Stand-ins for non-Windows targets: the daemon is Windows-only, this keeps the rest compiling and testable.
+
+use std::io::{Error, ErrorKind, Result};
+use std::net::SocketAddr;
+
+use super::Proto;
+
+pub fn is_elevated() -> bool {
+    false
+}
+
+#[derive(Default)]
+pub struct Owners;
+
+impl Owners {
+    pub fn image(
+        &self,
+        _proto: Proto,
+        _local: SocketAddr,
+        _remote: Option<SocketAddr>,
+    ) -> Option<String> {
+        None
+    }
+}
+
+pub fn physical_interface(_exclude: u32) -> Option<u32> {
+    None
+}
+
+/// Pin `socket` to the interface with this index, so its traffic bypasses the TUN routes.
+pub fn bind_to_interface<S>(_socket: &S, _index: u32) -> Result<()> {
+    Ok(())
+}
+
+pub struct Routes;
+
+impl Routes {
+    pub fn install(_tun_index: u32) -> Result<Self> {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "seltund steers traffic on Windows only",
+        ))
+    }
+}
