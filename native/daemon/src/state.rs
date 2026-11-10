@@ -17,7 +17,8 @@ pub struct State {
 impl State {
     pub fn load(path: &Path) -> Result<Self> {
         match std::fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text)
+            // Windows editors can add a byte order mark. JSON does not accept it.
+            Ok(text) => serde_json::from_str(text.trim_start_matches('\u{feff}'))
                 .with_context(|| format!("Cannot parse {}", path.display())),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(error) => Err(error).with_context(|| format!("Cannot read {}", path.display())),
@@ -33,6 +34,14 @@ mod tests {
     fn missing_file_is_off() {
         let dir = std::env::temp_dir().join("seltun-state-missing");
         assert!(!State::load(&dir.join("state.json")).unwrap().enabled);
+    }
+
+    #[test]
+    fn accepts_a_byte_order_mark() {
+        let path = std::env::temp_dir().join("seltun-state-bom.json");
+        std::fs::write(&path, "\u{feff}{\"enabled\": true}").unwrap();
+        assert!(State::load(&path).unwrap().enabled);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

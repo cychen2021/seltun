@@ -104,7 +104,7 @@ class Config:
         if not path.exists():
             return cls()
         try:
-            raw = tomllib.loads(path.read_text(encoding="utf-8"))
+            raw = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except tomllib.TOMLDecodeError as exc:
             raise SeltunError(f"{path}: {exc}") from exc
         config = cls()

@@ -153,6 +153,15 @@ def test_request_without_daemon_says_so():
         request(("127.0.0.1", 1), "ping", timeout=1)
 
 
+def test_files_with_a_byte_order_mark_are_accepted(tmp_path):
+    (tmp_path / "s.json").write_text('{"enabled": true}', encoding="utf-8-sig")
+    assert State.load(tmp_path / "s.json").enabled is True
+    (tmp_path / "c.toml").write_text(
+        '[processes]\nnames = ["a.exe"]\n', encoding="utf-8-sig"
+    )
+    assert Config.load(tmp_path / "c.toml").processes.names == ["a.exe"]
+
+
 def test_state_defaults_to_off_and_round_trips(tmp_path):
     assert State.load(tmp_path / "none.json").enabled is False
     State(enabled=True).save(tmp_path / "s.json")

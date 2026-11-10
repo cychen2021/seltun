@@ -22,7 +22,7 @@ class State:
     def load(cls, path: Path) -> State:
         if not path.exists():
             return cls()
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in raw.items() if k in known})
 

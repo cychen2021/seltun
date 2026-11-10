@@ -124,7 +124,8 @@ impl Settings {
     }
 
     pub fn parse(text: &str) -> Result<Self> {
-        let file: File = toml::from_str(text)?;
+        // Windows editors can add a byte order mark. TOML does not accept it.
+        let file: File = toml::from_str(text.trim_start_matches('\u{feff}'))?;
         let upstream = file.upstream.unwrap_or_default();
         let tun = file.tun.unwrap_or_default();
         let address: Ipv4Addr = {
@@ -189,6 +190,12 @@ mod tests {
         .unwrap();
         assert_eq!(s.upstream.address.port(), 1080);
         assert_eq!(s.upstream.protocol, Protocol::Http);
+        assert_eq!(s.processes, ["a.exe"]);
+    }
+
+    #[test]
+    fn accepts_a_byte_order_mark() {
+        let s = Settings::parse("\u{feff}[processes]\nnames = [\"a.exe\"]\n").unwrap();
         assert_eq!(s.processes, ["a.exe"]);
     }
 

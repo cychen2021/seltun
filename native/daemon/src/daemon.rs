@@ -182,6 +182,8 @@ async fn start(settings: Settings) -> Result<Active> {
         // A /30 network: the address of the adapter and a nominal peer. The half-default routes send the traffic into the adapter.
         .netmask(Ipv4Addr::new(255, 255, 255, 252))
         .mtu(settings.tun.mtu)
+        // The highest interface metric. Windows then prefers the physical connection as the primary network. Without this, the adapter has a low automatic metric, and Windows shows the adapter (a wired network) instead of Wi-Fi. The metric does not change the forwarding, because the routes of the adapter have longer prefixes than the default route.
+        .metric(9999)
         .up();
     config.platform_config(|platform| {
         platform.device_guid(ADAPTER_GUID);
