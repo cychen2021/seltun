@@ -36,7 +36,7 @@ List the processes under `[processes].names` (file names such as `哔哩哔哩.e
 | On/off state | `%LOCALAPPDATA%\seltun\state.json` |
 | Daemon log | `%LOCALAPPDATA%\seltun\Logs\seltund.log` |
 
-`--config` and `--state` override the first two.
+`--config` and `--state` override the first two. The annotated template is [`src/seltun/config.example.toml`](src/seltun/config.example.toml) (`seltun init` copies it). There is no `secrets.example.toml`: seltun holds no credentials, since Clash's local mixed port takes none.
 
 ## Development
 

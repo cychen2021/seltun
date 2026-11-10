@@ -15,9 +15,9 @@ use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetExtendedTcpTable, GetExtendedUdpTable, GetIpForwardTable2,
-    GetIpInterfaceEntry, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_TCPTABLE_OWNER_PID,
-    MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+    FreeMibTable, GetExtendedTcpTable, GetExtendedUdpTable, GetIfEntry2, GetIpForwardTable2,
+    GetIpInterfaceEntry, MIB_IF_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
+    MIB_TCPTABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, IPPROTO_IP, setsockopt};
 use windows_sys::Win32::System::Threading::{
@@ -248,6 +248,12 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
             if GetIpInterfaceEntry(&mut iface) != 0 {
                 continue;
             }
+            // A disconnected adapter (a TAP with a stale default route, say) keeps its route and often a better metric; only one that is up and connected counts.
+            let mut link: MIB_IF_ROW2 = std::mem::zeroed();
+            link.InterfaceIndex = row.InterfaceIndex;
+            if GetIfEntry2(&mut link) != 0 || link.OperStatus != 1 || link.MediaConnectState == 2 {
+                continue;
+            }
             let metric = row.Metric.saturating_add(iface.Metric);
             if best.is_none_or(|(m, _)| metric < m) {
                 best = Some((metric, row.InterfaceIndex));
@@ -368,6 +374,11 @@ mod tests {
         // Offline machines have none; online ones must name a real index.
         if let Some(index) = physical_interface(u32::MAX) {
             assert!(index > 0);
+            // Regression: a disconnected TAP adapter with a stale default route once won on metric.
+            let mut link: MIB_IF_ROW2 = unsafe { std::mem::zeroed() };
+            link.InterfaceIndex = index;
+            assert_eq!(unsafe { GetIfEntry2(&mut link) }, 0);
+            assert_eq!(link.OperStatus, 1, "interface {index} is not up");
         }
     }
 

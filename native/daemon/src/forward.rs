@@ -156,6 +156,15 @@ async fn handle_udp<S>(mut flow: S, src: SocketAddr, dst: SocketAddr, ctx: Arc<C
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    // Only unicast IPv4 is routed into the TUN; the adapter's own IPv6 chatter is not forwarded.
+    // Multicast and broadcast (SSDP, LLMNR, mDNS) have no destination to relay to.
+    let local_only = match dst.ip() {
+        std::net::IpAddr::V4(ip) => ip.is_multicast() || ip.is_broadcast(),
+        std::net::IpAddr::V6(_) => true,
+    };
+    if local_only {
+        return;
+    }
     let probe = ctx.clone();
     let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Udp, src, dst))
         .await

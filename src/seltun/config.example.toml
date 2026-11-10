@@ -1,7 +1,7 @@
 # Config for `seltun` and its daemon `seltund`. `seltun init` copies this template to the per-user config path (`%APPDATA%\seltun\config.toml` on Windows); edit that copy. Holds no secrets; the on/off switch lives in the data directory (`%LOCALAPPDATA%\seltun\state.json`).
 
 [processes]
-# The processes to steer, by executable file name (`chrome.exe`) or by full path (`C:\Program Files\App\app.exe`); case-insensitive. Everything else on the system is left alone, though while seltun is on it passes through the daemon. Nothing is steered until you list something here.
+# The processes to steer, by executable file name (`哔哩哔哩.exe`) or by full path (`C:\Program Files\bilibili\哔哩哔哩.exe`); case-insensitive. Everything else on the system is left alone, though while seltun is on it passes through the daemon. Nothing is steered until you list something here.
 names = []
 
 [upstream]
