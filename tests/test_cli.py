@@ -17,6 +17,12 @@ from seltun.support.errors import DaemonNotRunning, SeltunError
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _no_startup_task(monkeypatch):
+    """Do not query the real Task Scheduler in tests."""
+    monkeypatch.setattr(autostart, "registered", lambda: None)
+
+
 class FakeDaemon:
     """A fake daemon. It answers the control protocol from the state file, as the real daemon does at `reload`."""
 
@@ -91,6 +97,19 @@ def test_on_persists_and_reloads_the_daemon(env):
         assert result.exit_code == 0 and State.load(state).enabled is False
     finally:
         daemon.close()
+
+
+def test_status_shows_the_startup_task_even_without_a_daemon(env, monkeypatch):
+    from seltun import autostart
+
+    _, write_config, invoke = env
+    write_config(1)
+    monkeypatch.setattr(autostart, "registered", lambda: None)
+    assert "startup  disabled" in invoke("status").output
+    monkeypatch.setattr(autostart, "registered", lambda: "seltund.exe --config x")
+    assert "startup  enabled: seltund.exe --config x" in invoke("status").output
+    out = json.loads(invoke("status", "--json").output)
+    assert out["daemon"] is None and out["startup"] == "seltund.exe --config x"
 
 
 def test_switch_survives_without_a_daemon(env):

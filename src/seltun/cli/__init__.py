@@ -203,7 +203,7 @@ def status(
     ctx: typer.Context,
     as_json: bool = typer.Option(False, "--json", help="Show machine-readable output."),
 ) -> None:
-    """Show the saved switch and the state of the daemon."""
+    """Show the saved switch, the state of the daemon, and the startup task."""
     c: Context = ctx.obj
     with handle_errors():
         persisted = State.load(c.state_path)
@@ -211,24 +211,30 @@ def status(
             daemon = request(c.control, "status")
         except DaemonNotRunning:
             daemon = None
+        startup = autostart_.registered()
     if as_json:
-        typer.echo(json.dumps({"state": asdict(persisted), "daemon": daemon}, indent=2))
+        typer.echo(
+            json.dumps(
+                {"state": asdict(persisted), "daemon": daemon, "startup": startup},
+                indent=2,
+            )
+        )
         return
     typer.echo(
         f"switch   {'on' if persisted.enabled else 'off'} (saved in {c.state_path})"
     )
     if daemon is None:
         typer.echo("daemon   not running (`seltun daemon start`)")
-        return
-    typer.echo(
-        f"daemon   running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
-    )
-    typer.echo(f"steering {'active' if daemon['active'] else 'inactive'}")
-    typer.echo(f"upstream {daemon['upstream']}")
-    typer.echo(f"selected {', '.join(daemon['processes']) or '(none)'}")
-    if daemon["error"]:
-        typer.echo(f"problem  {daemon['error']}")
-    typer.echo(f"startup  {_autostart_summary(autostart_.registered())}")
+    else:
+        typer.echo(
+            f"daemon   running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
+        )
+        typer.echo(f"steering {'active' if daemon['active'] else 'inactive'}")
+        typer.echo(f"upstream {daemon['upstream']}")
+        typer.echo(f"selected {', '.join(daemon['processes']) or '(none)'}")
+        if daemon["error"]:
+            typer.echo(f"problem  {daemon['error']}")
+    typer.echo(f"startup  {_autostart_summary(startup)}")
 
 
 @daemon_app.command("start")
@@ -312,14 +318,6 @@ def autostart_disable() -> None:
         print_success("The daemon does not start at login.")
     else:
         print_info("The startup task was not installed.")
-
-
-@autostart_app.command("status")
-def autostart_status() -> None:
-    """Show if the daemon starts at login and the command that it uses."""
-    with handle_errors():
-        line = autostart_.registered()
-    typer.echo(_autostart_summary(line))
 
 
 def _autostart_summary(line: str | None) -> str:
