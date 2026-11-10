@@ -1,6 +1,6 @@
-//! The data path. A userspace TCP/IP stack (`ipstack`) ends the flows that arrive in the TUN adapter. In the TUN mode of Clash Verge, gVisor does this work. Then the daemon forwards the flows.
+//! The data path. A userspace TCP/IP stack (`ipstack`) ends the flows that arrive in the TUN adapter. Then the daemon forwards the flows.
 //!
-//! The daemon finds the process of each flow in the socket tables. If the process is selected, the daemon sends the flow to the port of Clash. If not, the flow leaves through the physical interface without a change. A socket that the daemon pins to that interface carries it, as `auto-detect-interface` of Clash does. Thus the daemon proxies only the selected processes.
+//! The daemon finds the process of each flow in the socket tables. If the process is selected, the daemon sends the flow to the upstream proxy. If not, the flow leaves through the physical interface without a change. A socket that the daemon pins to that interface carries it. Thus the daemon proxies only the selected processes.
 
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -25,7 +25,7 @@ const IFACE_TTL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
-    /// Through Clash.
+    /// Through the upstream proxy.
     Proxy,
     /// Out through the physical interface, without a change.
     Direct,
@@ -169,13 +169,13 @@ where
     let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Udp, src, dst))
         .await
         .unwrap_or(Verdict::Direct);
-    // If UDP does not go through Clash, the DNS of a selected process goes direct, and the daemon drops its other UDP (QUIC, for example). The application then changes to TCP.
-    let through_clash = verdict == Verdict::Proxy && ctx.upstream.udp;
-    if verdict == Verdict::Proxy && !through_clash && dst.port() != 53 {
+    // If UDP does not go through the proxy, the DNS of a selected process goes direct, and the daemon drops its other UDP (QUIC, for example). The application then changes to TCP.
+    let through_proxy = verdict == Verdict::Proxy && ctx.upstream.udp;
+    if verdict == Verdict::Proxy && !through_proxy && dst.port() != 53 {
         return;
     }
-    let result = if through_clash {
-        relay_udp_via_clash(&mut flow, dst, &ctx).await
+    let result = if through_proxy {
+        relay_udp_via_proxy(&mut flow, dst, &ctx).await
     } else {
         relay_udp_direct(&mut flow, dst, &ctx).await
     };
@@ -209,7 +209,7 @@ where
     }
 }
 
-async fn relay_udp_via_clash<S>(flow: &mut S, dst: SocketAddr, ctx: &Context) -> IoResult<()>
+async fn relay_udp_via_proxy<S>(flow: &mut S, dst: SocketAddr, ctx: &Context) -> IoResult<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -231,7 +231,7 @@ where
     }
 }
 
-/// Answer a ping in the daemon. A userspace program cannot forward an ICMP echo. The TUN mode of Clash does the same.
+/// Answer a ping in the daemon. A userspace program cannot forward an ICMP echo.
 fn echo_reply(payload: &[u8]) -> Option<Vec<u8>> {
     use etherparse::{Icmpv4Header, Icmpv4Type};
     let (header, body) = Icmpv4Header::from_slice(payload).ok()?;

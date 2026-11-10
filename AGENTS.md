@@ -8,14 +8,14 @@ The file has only the information that applies to each task. The pages in `docs/
 
 ## Project purpose
 
-seltun is the TUN mode of Clash Verge for selected processes only. The TUN mode of Clash Verge (mihomo and Wintun) captures the whole system. seltun creates a Wintun adapter and steers only the **selected processes** into it. Then it forwards the flows to a destination. The destination is the mixed port of Clash Verge, which sends the flows through a proxy. All other traffic keeps its usual path.
+seltun is a TUN adapter for selected processes only. A system-wide TUN adapter captures the whole computer. seltun creates a Wintun adapter and steers only the **selected processes** into it. Then it forwards the flows to a local SOCKS5 or HTTP proxy (the upstream). All other traffic keeps its usual path.
 
 seltun has a CLI and a daemon, as a sibling CLI project has:
 
 - `seltun` (Python, Typer) has the config, the persistent on/off switch (`state.json`), the start of the daemon and autostart.
-- `seltund` (Rust, `native/daemon/`) is the daemon. When the switch is on, it creates the TUN adapter and the routes. It finds the process of each flow. It forwards the flows of the selected processes to Clash. It sends the other flows out through the physical interface. A loopback JSON-lines port controls the daemon.
+- `seltund` (Rust, `native/daemon/`) is the daemon. When the switch is on, it creates the TUN adapter and the routes. It finds the process of each flow. It forwards the flows of the selected processes to the upstream proxy. It sends the other flows out through the physical interface. A loopback JSON-lines port controls the daemon.
 
-The name of the daemon executable is intentional. Each connection from the daemon to Clash comes from the process `seltund.exe`. A `PROCESS-NAME` rule of Clash matches this name. See [docs/daemon.md](docs/daemon.md) for the data path and the reasons for the design. The design follows the TUN mode of Clash Verge. It does not use a WinDivert redirect, because Defender puts WinDivert in quarantine.
+The name of the daemon executable is intentional. Each connection from the daemon to the upstream proxy comes from the process `seltund.exe`. A rule of the proxy that matches the process name can match this name. See [docs/daemon.md](docs/daemon.md) for the data path and the reasons for the design. The design uses a Wintun adapter with half-default routes. It does not use a WinDivert redirect, because Defender puts WinDivert in quarantine.
 
 The project works on Windows only (Wintun, IP Helper, Task Scheduler). The pure Rust modules and the Python layer build and test on each system.
 
@@ -49,7 +49,7 @@ src/seltun/
   drivers.py             # pinned download of wintun.dll
   cli/                   # Typer commands (thin layer)
   support/               # console output (loguru) and error types
-native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of Clash), forward (data path), daemon (reconcile), control, platform (Windows code)
+native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of the upstream proxy), forward (data path), daemon (reconcile), control, platform (Windows code)
 tests/                   # pytest
 config.example.toml      # template with comments; `seltun init` copies it (the wheel contains it)
 hatch_build.py           # build hook: compiles the daemon, downloads Wintun, adds the template to the wheel
@@ -59,6 +59,7 @@ format.py, type_check.py
 ## Conventions
 
 - **Standard for text:** Write all documentation and all help and error messages in ASD-STE100 Simplified Technical English, Issue 9. The standard is in `C:\Users\cychen\OneDrive\Documents\ASD-STE100_ISSUE9.pdf`.
+- **No external proxy software:** Do not name a proxy program in the docs, the help text, the messages or the comments. seltun forwards to any SOCKS5 or HTTP proxy at the address in `[upstream].address`.
 - **Gate:** Run `format.py` and then `type_check.py` after a large change.
 - **Imports:** Use at most two leading dots. If an import needs three dots, use the absolute path.
 - **Line breaks:** Do not use hard line wraps, except in doc comments in source code or where a tool needs them. Write one line for each paragraph in each markdown file, each TOML comment and each commit-message bullet. `.markdownlint-cli2.jsonc` switches off `MD013` for this reason.

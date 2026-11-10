@@ -1,4 +1,4 @@
-"""seltun: steer selected processes into a TUN adapter and forward them to Clash.
+"""seltun: steer selected processes into a TUN adapter and forward them to a local proxy.
 
 The command-line interface is in the :mod:`seltun.cli` package. ``main`` is the entry point of the console script. The daemon is the Rust binary ``seltund`` (``native/daemon/``).
 """

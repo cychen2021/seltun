@@ -6,4 +6,4 @@ File names are in `snake_case.md`. Each page is in this index. Add a row for eac
 
 | Page | Contents |
 | --- | --- |
-| [daemon.md](daemon.md) | `seltund`: the TUN mode of Clash Verge and the changes in seltun, the data path, the control channel, the switch state, elevation, autostart and limits |
+| [daemon.md](daemon.md) | `seltund`: the design, the data path, the control channel, the switch state, elevation, autostart and limits |

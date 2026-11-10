@@ -1,6 +1,6 @@
 """Start the daemon at login with administrator rights.
 
-The daemon needs administrator rights to create the Wintun adapter and its routes. A Run-key entry cannot get these rights without a UAC prompt at each login. Thus autostart is a Task Scheduler task. At the logon of the user, it starts ``seltund.exe`` with the highest privileges and shows no prompt. The service mode of Clash Verge does the same with a service.
+The daemon needs administrator rights to create the Wintun adapter and its routes. A Run-key entry cannot get these rights without a UAC prompt at each login. Thus autostart is a Task Scheduler task. At the logon of the user, it starts ``seltund.exe`` with the highest privileges and shows no prompt.
 
 To create or remove the task, use an elevated terminal one time. To start, stop, or query the task, you do not need an elevated terminal.
 

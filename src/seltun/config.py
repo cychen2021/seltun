@@ -48,7 +48,7 @@ class ProcessesConfig:
 
 @dataclass
 class UpstreamConfig:
-    address: str = "127.0.0.1:7897"
+    address: str = "127.0.0.1:1080"
     protocol: str = "socks5"
     udp: bool = False
 

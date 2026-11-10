@@ -44,7 +44,7 @@ class FakeDaemon:
                         "active": enabled and outer.error is None,
                         "error": outer.error if enabled else None,
                         "processes": ["a.exe"],
-                        "upstream": "127.0.0.1:7897",
+                        "upstream": "127.0.0.1:1080",
                         "elevated": True,
                     }
                     self.wfile.write(
@@ -160,7 +160,7 @@ def test_state_defaults_to_off_and_round_trips(tmp_path):
 
 
 def test_config_defaults_and_kebab_keys(tmp_path):
-    assert Config.load(tmp_path / "none.toml").upstream.address == "127.0.0.1:7897"
+    assert Config.load(tmp_path / "none.toml").upstream.address == "127.0.0.1:1080"
     p = tmp_path / "c.toml"
     p.write_text(
         '[upstream]\nprotocol = "http"\n[processes]\nnames = ["x.exe"]\n',

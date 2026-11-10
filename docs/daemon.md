@@ -1,19 +1,18 @@
 # The daemon (`seltund`)
 
-## The TUN mode of Clash Verge and the changes in seltun
+## Design
 
-Clash Verge runs mihomo with a `tun:` section. On the computer of the owner, the section has these values: `stack: gvisor`, `auto-route: true`, `auto-detect-interface: true` and `dns-hijack: any:53`. In this mode, mihomo does these steps:
+seltun uses the design of a system-wide TUN adapter, and it adds a filter for processes. The daemon does these steps when the switch is on:
 
 1. It creates a **Wintun** adapter.
-2. It adds **auto-route** routes. These are the two half-default routes `0.0.0.0/1` and `128.0.0.0/1`. Each destination without a more specific route then enters the adapter.
-3. It ends the flows in a **userspace TCP/IP stack** (gVisor).
-4. It compares each flow with the rules. A `PROCESS-NAME` rule finds the process that owns the source socket.
-5. It sends the flow through a proxy or `DIRECT`.
-6. It pins its own outbound sockets to the physical network interface (**auto-detect-interface**). The sockets then do not go back into the adapter.
+2. It adds two half-default routes: `0.0.0.0/1` and `128.0.0.0/1`. Each destination without a more specific route then enters the adapter.
+3. It ends the flows in a **userspace TCP/IP stack** (`ipstack`).
+4. It finds the process that owns the source socket of each flow. Then it asks one question: is the process in `[processes].names`?
+5. It pins its own outbound sockets to the physical network interface. The sockets then do not go back into the adapter.
 
-seltun keeps this design: Wintun, half-default routes, a userspace stack, a process lookup and pinned outbound sockets. seltun replaces the rule engine with one question: is the owning process in `[processes].names`?
+The answer to the question in step 4 decides the path of the flow:
 
-- If yes, seltun sends the flow to the mixed port of Clash (`[upstream]`). Clash then sends it through a proxy.
+- If yes, the daemon sends the flow to the upstream proxy (`[upstream]`). The proxy is a local SOCKS5 or HTTP proxy.
 - If no, the flow leaves through the physical interface without a change.
 
 The adapter and the routes are present only when seltun is on.
@@ -35,7 +34,7 @@ Windows sends a flow into the adapter. The source address of the flow is then th
 - `Matcher` compares the path with the names or paths in the config file.
 - If the daemon does not find the owner of a flow, the flow counts as not selected. Examples are the flow of a system process and the flow of a closed socket.
 
-**Selected process, TCP:** The daemon sends a SOCKS5 `CONNECT` or an HTTP `CONNECT` to `[upstream].address` for the destination IP. Clash receives only IP addresses, because the process resolved the name before. Thus the domain rules of Clash do not apply to this traffic. Use `PROCESS-NAME` rules and IP rules.
+**Selected process, TCP:** The daemon sends a SOCKS5 `CONNECT` or an HTTP `CONNECT` to `[upstream].address` for the destination IP. The upstream proxy receives only IP addresses, because the process resolved the name before. Thus rules of the proxy that match a domain do not apply to this traffic.
 
 **Selected process, UDP:**
 
@@ -44,11 +43,11 @@ Windows sends a flow into the adapter. The source address of the flow is then th
 
 **Other processes:** A socket that the daemon pins to the physical interface with `IP_UNICAST_IF` connects to the destination. The physical interface has the default route with the lowest metric. It must be up and connected, and it is not the adapter. `GetIpForwardTable2` gives the routes. The daemon looks for the physical interface again after two seconds. Thus it follows a change between Wi-Fi and Ethernet.
 
-**ICMP echo:** The daemon sends the ping replies. A userspace program cannot forward an ICMP echo. The TUN mode of Clash does the same. Thus each ping gets a reply when seltun is on.
+**ICMP echo:** The daemon sends the ping replies. A userspace program cannot forward an ICMP echo. Thus each ping gets a reply when seltun is on.
 
-### What Clash sees
+### What the upstream proxy sees
 
-The daemon makes each connection to Clash. Thus Clash identifies all forwarded traffic as the process `seltund.exe`. A rule `PROCESS-NAME,seltund.exe` in the Clash profile matches this traffic. seltun does not change the Clash configuration. The name `seltund.exe` is part of the rules that users write for Clash. Do not change the name.
+The daemon makes each connection to the upstream proxy. Thus the proxy identifies all forwarded traffic as the process `seltund.exe`. A rule of the proxy that matches the process name `seltund.exe` matches this traffic. seltun does not change the configuration of the proxy. Do not change the name of the executable, because users can write rules for it.
 
 ## Control channel and switch state
 
@@ -87,8 +86,8 @@ A daemon that is not elevated answers on the control channel. It reports the rea
 
 ## Limits
 
-- seltun supports IPv4 only. It adds no IPv6 routes. Thus the IPv6 traffic of the selected processes does not go to Clash.
+- seltun supports IPv4 only. It adds no IPv6 routes. Thus the IPv6 traffic of the selected processes does not go to the upstream proxy.
 - seltun steers only new connections. A connection that was open before you set the switch to on is not changed.
 - seltun does not follow child processes. Add them to the list.
-- The domain rules of Clash do not see this traffic. They see only the IP addresses.
-- Do not use the TUN mode of Clash Verge at the same time. Both add half-default routes.
+- The upstream proxy sees only IP addresses. Thus its rules that match a domain do not apply.
+- Do not use another system-wide TUN program at the same time. Both add half-default routes.

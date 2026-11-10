@@ -332,7 +332,7 @@ fn netsh(args: &[&str]) -> Result<()> {
     }
 }
 
-/// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. The `auto-route` of Clash Verge does the same. With these routes, the packets of a process leave from the address of the TUN. The routes go away with the adapter. The code also removes them when the daemon stops.
+/// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. With these routes, the packets of a process leave from the address of the TUN. The routes go away with the adapter. The code also removes them when the daemon stops.
 pub struct Routes {
     interface: String,
 }

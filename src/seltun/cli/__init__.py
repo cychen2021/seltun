@@ -47,7 +47,7 @@ switch_app = typer.Typer(
 app.add_typer(switch_app, name="switch")
 daemon_app = typer.Typer(
     no_args_is_help=True,
-    help="Run, start, or stop the daemon.",
+    help="Run, start, stop, or reload the daemon.",
 )
 app.add_typer(daemon_app, name="daemon")
 
@@ -93,7 +93,7 @@ def _root(
         help="Show the version and stop.",
     ),
 ) -> None:
-    """Steer selected processes into a TUN adapter and forward them to Clash."""
+    """Steer selected processes into a TUN adapter and forward them to a local proxy."""
     console.configure(verbose)
     config_path = config or paths.config_file()
     with handle_errors():
@@ -149,7 +149,7 @@ def _save_state(c: Context, enabled: bool) -> None:
 def _summary(status: dict[str, Any]) -> str:
     """One line about the state of the daemon."""
     if status["active"]:
-        return f"on. The daemon steers {', '.join(status['processes'])} to Clash at {status['upstream']}"
+        return f"on. The daemon steers {', '.join(status['processes'])} to the proxy at {status['upstream']}"
     return "on, but the daemon does not steer" if status["enabled"] else "off"
 
 
@@ -170,7 +170,7 @@ def _apply(c: Context, enabled: bool) -> None:
             return
         if status["error"]:
             raise SeltunError(
-                f"{status['error']} The switch stays {'on' if enabled else 'off'}. Correct the problem, then run `seltun reload`."
+                f"{status['error']} The switch stays {'on' if enabled else 'off'}. Correct the problem, then run `seltun daemon reload`."
             )
     print_success(f"seltun is {_summary(status)}")
 
@@ -187,8 +187,8 @@ def switch_off(ctx: typer.Context) -> None:
     _apply(ctx.obj, False)
 
 
-@app.command()
-def reload(ctx: typer.Context) -> None:
+@daemon_app.command("reload")
+def daemon_reload(ctx: typer.Context) -> None:
     """Make the daemon read the config file and the switch state again."""
     c: Context = ctx.obj
     with handle_errors():

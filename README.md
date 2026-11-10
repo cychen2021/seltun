@@ -1,8 +1,8 @@
 # seltun
 
-seltun sends the traffic of selected processes to Clash Verge. The TUN mode of Clash Verge steers all traffic of the system. seltun steers only the processes that you select.
+seltun sends the traffic of selected Windows processes to a local proxy. A system-wide TUN adapter steers all traffic of the computer. seltun steers only the processes that you select.
 
-When seltun is on, a daemon creates a Wintun adapter. The daemon sends the traffic of the selected processes through the adapter to the local port of Clash Verge. Clash Verge then sends the traffic to a proxy. All other traffic keeps its usual path.
+When seltun is on, a daemon creates a Wintun adapter. The daemon sends the traffic of the selected processes through the adapter to the proxy that you configure (SOCKS5 or HTTP). All other traffic keeps its usual path.
 
 A CLI sets the switch to on or off. The switch keeps its state when the computer starts again.
 
@@ -35,11 +35,11 @@ These commands are also available:
 | `seltun status` | Shows the switch, the daemon, the startup task, and the problem if there is one. |
 | `seltun daemon run` | Runs the daemon in the foreground. Use an elevated terminal. |
 | `seltun daemon stop` | Stops the daemon. The switch keeps its state. |
-| `seltun reload` | Makes the daemon read the config file and the switch again. |
+| `seltun daemon reload` | Makes the daemon read the config file and the switch again. |
 | `seltun autostart disable` | Removes the startup task. Use an elevated terminal. |
 | `seltun --version` | Shows the version. |
 
-Clash sees all forwarded traffic as traffic of the process `seltund.exe`. The value of `[upstream].address` is the mixed port of Clash Verge. The default value is 7897.
+The proxy sees all forwarded traffic as traffic of the process `seltund.exe`. The value of `[upstream].address` is the address of the proxy. The default value is 127.0.0.1:1080.
 
 These files hold the data of seltun:
 
@@ -49,7 +49,7 @@ These files hold the data of seltun:
 | Switch state | `%LOCALAPPDATA%\seltun\state.json` |
 | Daemon log | `%LOCALAPPDATA%\seltun\Logs\seltund.log` |
 
-The options `--config` and `--state` change the first two locations. The file [`config.example.toml`](config.example.toml) is the template with comments. The command `seltun init` copies it. seltun does not keep credentials, because the local mixed port of Clash does not use them. Thus there is no `secrets.example.toml` file.
+The options `--config` and `--state` change the first two locations. The file [`config.example.toml`](config.example.toml) is the template with comments. The command `seltun init` copies it. seltun does not keep credentials, because a local proxy port does not use them. Thus there is no `secrets.example.toml` file.
 
 ## Build and test
 

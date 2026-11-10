@@ -1,6 +1,6 @@
 """Download of ``wintun.dll``. This is the only third-party binary that the daemon needs next to ``seltund.exe``.
 
-Wintun (https://www.wintun.net) is the TUN driver that the TUN mode of Clash Verge also uses. A SHA-256 value pins the release zip. The code refuses a changed download. The module uses only the standard library, because the build hook (``hatch_build.py``) loads this file directly.
+Wintun (https://www.wintun.net) is the TUN driver that the daemon uses. A SHA-256 value pins the release zip. The code refuses a changed download. The module uses only the standard library, because the build hook (``hatch_build.py``) loads this file directly.
 """
 
 from __future__ import annotations

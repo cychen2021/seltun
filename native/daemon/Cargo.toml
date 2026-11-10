@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Daemon that steers selected processes into a TUN adapter and forwards them to Clash."
+description = "Daemon that steers selected processes into a TUN adapter and forwards them to a local proxy."
 
 [[bin]]
 name = "seltund"

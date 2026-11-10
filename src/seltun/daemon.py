@@ -2,7 +2,7 @@
 
 The wheel has the binary and ``wintun.dll`` in ``seltun/bin/`` (``hatch_build.py``). In a source checkout, the fallback is ``native/target/release/``. The CLI gives the daemon absolute ``--config`` and ``--state`` paths. Thus the daemon does not depend on ``PATH`` or on the working directory.
 
-The name of the executable is important: Clash sees each forwarded connection as a connection of the process ``seltund.exe``.
+The name of the executable is important: the upstream proxy sees each forwarded connection as a connection of the process ``seltund.exe``.
 """
 
 from __future__ import annotations

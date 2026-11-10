@@ -1,6 +1,6 @@
-//! The client of the mixed port of Clash: SOCKS5 (`CONNECT` and `UDP ASSOCIATE`) and HTTP `CONNECT`.
+//! The client of the upstream proxy: SOCKS5 (`CONNECT` and `UDP ASSOCIATE`) and HTTP `CONNECT`.
 //!
-//! The daemon makes each connection to the upstream from its own process. Thus Clash (which matches the process of the connection) sees all forwarded traffic as traffic of `seltund.exe`. A target is always an IP address, because the TUN sees only what the process already resolved.
+//! The daemon makes each connection to the upstream from its own process. Thus the proxy (if it matches the process of the connection) sees all forwarded traffic as traffic of `seltund.exe`. A target is always an IP address, because the TUN sees only what the process already resolved.
 
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};

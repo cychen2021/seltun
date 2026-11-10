@@ -5,15 +5,15 @@
 names = []
 
 [upstream]
-# The address that receives the traffic of the selected processes. This is the mixed port of Clash Verge (SOCKS5 and HTTP).
-address = "127.0.0.1:7897"
+# The address of the local proxy that receives the traffic of the selected processes. The proxy must accept SOCKS5 or HTTP.
+address = "127.0.0.1:1080"
 # The protocol: "socks5" or "http". The protocol "http" carries TCP only.
 protocol = "socks5"
-# Set this value to true to send the UDP of the selected processes through Clash. This needs `protocol = "socks5"` and a Clash proxy that supports UDP. If the value is false, DNS goes direct and the daemon drops all other UDP. The application then changes to TCP.
+# Set this value to true to send the UDP of the selected processes through the proxy. This needs `protocol = "socks5"` and a proxy that supports UDP. If the value is false, DNS goes direct and the daemon drops all other UDP. The application then changes to TCP.
 udp = false
 
 [tun]
-# The name and the address of the TUN adapter. The daemon creates the adapter when seltun is on. The address must not be in a network that you use. The range 198.19.0.0/16 is for tests of network devices and is not in use. The TUN mode of Clash uses 198.18.0.0/16 as its default.
+# The name and the address of the TUN adapter. The daemon creates the adapter when seltun is on. The address must not be in a network that you use. The range 198.19.0.0/16 is for tests of network devices and is not in use.
 name = "seltun"
 address = "198.19.0.1"
 mtu = 1500

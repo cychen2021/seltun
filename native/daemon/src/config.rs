@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde::Deserialize;
 
-pub const DEFAULT_UPSTREAM: &str = "127.0.0.1:7897";
+pub const DEFAULT_UPSTREAM: &str = "127.0.0.1:1080";
 pub const DEFAULT_CONTROL: &str = "127.0.0.1:7898";
 pub const DEFAULT_TUN_NAME: &str = "seltun";
 pub const DEFAULT_TUN_ADDRESS: &str = "198.19.0.1";
@@ -18,7 +18,7 @@ pub const DEFAULT_TUN_ADDRESS: &str = "198.19.0.1";
 #[command(
     name = "seltund",
     version,
-    about = "Steer selected processes into a TUN adapter and forward them to Clash."
+    about = "Steer selected processes into a TUN adapter and forward them to a local proxy."
 )]
 pub struct Cli {
     /// The config file. The `seltun` CLI uses the same file.
@@ -44,10 +44,10 @@ pub enum Protocol {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Upstream {
-    /// The mixed port of Clash, or a SOCKS5 port or an HTTP port.
+    /// The address of the local proxy (SOCKS5 or HTTP).
     pub address: SocketAddr,
     pub protocol: Protocol,
-    /// If true, the UDP of the selected processes goes through Clash (SOCKS5 only). If false, DNS goes direct and the daemon drops the other UDP.
+    /// If true, the UDP of the selected processes goes through the proxy (SOCKS5 only). If false, DNS goes direct and the daemon drops the other UDP.
     pub udp: bool,
 }
 
