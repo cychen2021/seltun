@@ -15,7 +15,7 @@ It is a CLI plus a daemon, like a sibling CLI project:
 - `seltun` (Python, Typer): config, the persisted on/off switch (`state.json`), starting the daemon, autostart.
 - `seltund` (Rust, `native/daemon/`): the daemon. Creates the TUN adapter and routes while "on", decides each flow's process, forwards selected flows to Clash and the rest out the real interface. Controlled over a loopback JSON-lines port.
 
-The daemon's executable name is deliberate: every connection it makes to Clash comes from the process `seltund.exe`, which is what Clash's `PROCESS-NAME` rules match (`seltun rule`). See [docs/daemon.md](docs/daemon.md) for the data path and why it is built this way (it follows Clash Verge's TUN, not a WinDivert redirect: Defender quarantines WinDivert).
+The daemon's executable name is deliberate: every connection it makes to Clash comes from the process `seltund.exe`, which is what Clash's `PROCESS-NAME` rules match. See [docs/daemon.md](docs/daemon.md) for the data path and why it is built this way (it follows Clash Verge's TUN, not a WinDivert redirect: Defender quarantines WinDivert).
 
 Windows only for now (Wintun, IP Helper, Task Scheduler); the pure Rust modules and the Python layer build and test anywhere.
 
@@ -23,7 +23,7 @@ Windows only for now (Wintun, IP Helper, Task Scheduler); the pure Rust modules 
 
 This project uses **uv** (not pip/poetry) and targets **Python 3.14**; the daemon in `native/` is a Cargo workspace (edition 2024, toolchain pinned in `native/rust-toolchain.toml`). Validate with the project interpreter (`uv run python`, `uv run pytest`), not a system `python` — ruff formats to 3.14-only syntax such as PEP 758's unparenthesized `except A, B:`; do not "fix" it by adding parentheses.
 
-- Install / sync deps: `uv sync` (editable; does not build the daemon — `cargo build --release --manifest-path native/Cargo.toml` does, and `seltun` falls back to `native/target/release/`; `seltun setup` fetches `wintun.dll` next to it)
+- Install / sync deps: `uv sync` (editable; does not build the daemon — `cargo build --release --manifest-path native/Cargo.toml` does, and `seltun` falls back to `native/target/release/`; `seltun init` fetches `wintun.dll` next to it)
 - Install as a tool: `uv tool install --force .` (the `hatch_build.py` hook compiles the daemon and downloads the pinned Wintun into `seltun/bin/`)
 - Run the CLI: `uv run seltun --help`
 - Tests: `uv run pytest`; `cargo test --manifest-path native/Cargo.toml`. Tests never create the adapter, elevated or not.
@@ -32,7 +32,7 @@ This project uses **uv** (not pip/poetry) and targets **Python 3.14**; the daemo
 
 **After any significant code change, run both `format.py` and `type_check.py`** before handing back or committing — there is no CI, so these scripts are the authoritative gate.
 
-Running the daemon for real needs an **elevated** terminal (Wintun adapter, routes): `seltun daemon` in the foreground, or `seltun autostart enable` once (an elevated Task Scheduler task) and then `seltun start` from any terminal.
+Running the daemon for real needs an **elevated** terminal (Wintun adapter, routes): `seltun daemon run` in the foreground, or `seltun autostart enable` once (an elevated Task Scheduler task) and then `seltun daemon start` from any terminal.
 
 ## Repo layout
 

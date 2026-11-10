@@ -31,5 +31,5 @@ def log_dir() -> Path:
 
 
 def daemon_log() -> Path:
-    """Where the daemon logs when it runs without a console (autostart, ``seltun start``)."""
+    """Where the daemon logs when it runs without a console (autostart, ``seltun daemon start``)."""
     return log_dir() / "seltund.log"

@@ -93,7 +93,7 @@ def start_background(argv: list[str], control: tuple[str, int], log: Path) -> in
     while time.monotonic() < deadline:
         if (code := process.poll()) is not None:
             raise SeltunError(
-                f"the daemon exited at once ({code}); run `seltun daemon` to see why, or check {log}"
+                f"the daemon exited at once ({code}); run `seltun daemon run` to see why, or check {log}"
             )
         try:
             request(control, "ping", timeout=1)

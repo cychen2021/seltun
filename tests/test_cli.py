@@ -83,11 +83,11 @@ def test_on_persists_and_reloads_the_daemon(env):
     daemon = FakeDaemon(state)
     try:
         write_config(daemon.port)
-        result = invoke("on")
+        result = invoke("switch", "on")
         assert result.exit_code == 0, result.output
         assert State.load(state).enabled is True
         assert daemon.commands == ["reload"]
-        result = invoke("off")
+        result = invoke("switch", "off")
         assert result.exit_code == 0 and State.load(state).enabled is False
     finally:
         daemon.close()
@@ -96,7 +96,7 @@ def test_on_persists_and_reloads_the_daemon(env):
 def test_switch_survives_without_a_daemon(env):
     state, write_config, invoke = env
     write_config(1)  # nothing listens on port 1
-    result = invoke("on")
+    result = invoke("switch", "on")
     assert result.exit_code == 0, result.output
     assert "not running" in result.output
     assert State.load(state).enabled is True
@@ -108,7 +108,7 @@ def test_on_reports_a_daemon_side_problem_but_keeps_the_switch(env):
     daemon = FakeDaemon(state, error="needs an elevated process")
     try:
         write_config(daemon.port)
-        result = invoke("on")
+        result = invoke("switch", "on")
         assert result.exit_code == 1
         assert "elevated" in result.output
         assert State.load(state).enabled is True
@@ -127,12 +127,6 @@ def test_status_json(env):
         assert out["daemon"]["active"] is True
     finally:
         daemon.close()
-
-
-def test_rule_names_the_daemon_process(env):
-    _, write_config, invoke = env
-    write_config(1)
-    assert invoke("rule", "Proxy").output.strip() == "PROCESS-NAME,seltund.exe,Proxy"
 
 
 def test_request_without_daemon_says_so():
@@ -188,3 +182,33 @@ def test_task_xml_is_elevated_logon_task_with_quoted_arguments():
     assert "<LogonTrigger>" in xml
     assert r"<Command>C:\Program Files\seltun\seltund.exe</Command>" in xml
     assert r'--config "C:\a b\c.toml"' in xml
+
+
+def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeypatch):
+    from seltun import daemon as daemon_
+    from seltun.cli import ensure_wintun as _  # noqa: F401  (the name the command uses)
+
+    _, write_config, invoke = env
+    binary = tmp_path / "bin" / "seltund.exe"
+    binary.parent.mkdir()
+    binary.write_bytes(b"")
+    monkeypatch.setattr(daemon_, "find_binary", lambda: binary)
+    fetched = []
+
+    def fake_fetch(directory, force=False):
+        fetched.append(directory)
+        (directory / "wintun.dll").write_bytes(b"dll")
+        return directory / "wintun.dll"
+
+    monkeypatch.setattr("seltun.cli.ensure_wintun", fake_fetch)
+    config = tmp_path / "config.toml"
+    assert not config.exists()
+    result = invoke("init")
+    assert result.exit_code == 0, result.output
+    assert config.exists() and fetched == [binary.parent]
+
+    config.write_text("# mine", encoding="utf-8")
+    result = invoke("init")
+    assert result.exit_code == 0 and "already exists" in result.output
+    assert config.read_text(encoding="utf-8") == "# mine"
+    assert fetched == [binary.parent]

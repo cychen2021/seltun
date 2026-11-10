@@ -24,7 +24,7 @@ def request(
             line = conn.makefile("rb").readline()
     except ConnectionRefusedError, TimeoutError:
         raise DaemonNotRunning(
-            f"the daemon does not answer on {address[0]}:{address[1]}; start it with `seltun start`"
+            f"the daemon does not answer on {address[0]}:{address[1]}; start it with `seltun daemon start`"
         ) from None
     except OSError as exc:
         raise SeltunError(

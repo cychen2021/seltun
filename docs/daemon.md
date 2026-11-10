@@ -26,19 +26,19 @@ An alternative considered first was WinDivert (steer only the selected processes
 
 ### What Clash sees
 
-Every connection to Clash is made by `seltund.exe`, so Clash identifies all forwarded traffic as the process `seltund.exe`. `seltun rule <proxy>` prints `PROCESS-NAME,seltund.exe,<proxy>` for the Clash profile. Do not rename the binary without changing that.
+Every connection to Clash is made by `seltund.exe`, so Clash identifies all forwarded traffic as the process `seltund.exe`. A `PROCESS-NAME,seltund.exe` rule in the Clash profile matches it; seltun does not manage Clash's configuration. Do not rename the binary casually: that name is part of how users write their Clash rules.
 
 ## Control channel and the persisted switch
 
-The daemon runs whenever it is started (at login via autostart, or `seltun start`) and is "on" or "off". The switch is `state.json` (`{"enabled": bool}` in the data directory); the CLI writes it atomically and then sends `reload` to `[daemon].control` (loopback, JSON lines: `{"cmd": "ping|status|reload|shutdown"}`). `reload` re-reads the state and the config and reconciles: on and not running → create the adapter and routes and start forwarding; off and running → tear them down; settings changed → restart. A broken config or state is reported and leaves what is running alone. At startup the daemon reconciles once, so it comes back in the state the user left. Requests carry no data, so the channel cannot be used to feed the (elevated) daemon anything but "look at the user's files again".
+The daemon runs whenever it is started (at login via autostart, or `seltun daemon start`) and is "on" or "off". The switch is `state.json` (`{"enabled": bool}` in the data directory); the CLI writes it atomically and then sends `reload` to `[daemon].control` (loopback, JSON lines: `{"cmd": "ping|status|reload|shutdown"}`). `reload` re-reads the state and the config and reconciles: on and not running → create the adapter and routes and start forwarding; off and running → tear them down; settings changed → restart. A broken config or state is reported and leaves what is running alone. At startup the daemon reconciles once, so it comes back in the state the user left. Requests carry no data, so the channel cannot be used to feed the (elevated) daemon anything but "look at the user's files again".
 
 The control port is also the single-instance guard: a second daemon fails to bind it. A changed `[daemon].control` needs a daemon restart.
 
 ## Elevation and autostart
 
-Creating the adapter and its routes needs administrator rights. A Run-key entry cannot elevate silently, so autostart is a Task Scheduler **logon task** with the highest privileges (`autostart.py`): `seltun autostart enable` creates it once from an elevated terminal; afterwards `seltun start` (runs the task) and login start the daemon elevated with no prompt. Without the task, `seltun daemon` in an elevated terminal runs it in the foreground. An unelevated daemon still answers the control channel and reports why it cannot turn on.
+Creating the adapter and its routes needs administrator rights. A Run-key entry cannot elevate silently, so autostart is a Task Scheduler **logon task** with the highest privileges (`autostart.py`): `seltun autostart enable` creates it once from an elevated terminal; afterwards `seltun daemon start` (runs the task) and login start the daemon elevated with no prompt. Without the task, `seltun daemon run` in an elevated terminal runs it in the foreground. An unelevated daemon still answers the control channel and reports why it cannot turn on.
 
-`wintun.dll` must sit next to `seltund.exe` (`seltun setup`, or the wheel build). It is fetched from wintun.net and pinned by SHA-256 in `drivers.py`.
+`wintun.dll` must sit next to `seltund.exe` (`seltun init`, or the wheel build). It is fetched from wintun.net and pinned by SHA-256 in `drivers.py`.
 
 ## Limitations
 

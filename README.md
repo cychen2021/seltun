@@ -19,16 +19,16 @@ This puts `seltun` on `PATH`, with `seltund.exe` and `wintun.dll` inside the pac
 ## Usage
 
 ```sh
-seltun init                    # write the example config, then edit it (`seltun paths` shows where)
+seltun init                    # create the config (if missing) and download wintun.dll (if missing); then edit the config (`seltun paths` shows where)
 seltun autostart enable        # once, from an ELEVATED terminal: start the daemon at every login, elevated
-seltun start                   # start the daemon now (no UAC prompt once the task exists)
-seltun on                      # steer the selected processes; `seltun off` stops; persisted across restarts
+seltun daemon start           # start the daemon now (no UAC prompt once the task exists)
+seltun switch on               # steer the selected processes; `seltun switch off` stops; persisted across restarts
 seltun status                  # the switch, the daemon, what it is doing
-seltun stop                    # stop the daemon
-seltun daemon                  # or: run it in the foreground (elevated terminal)
+seltun daemon stop            # stop the daemon
+seltun daemon run             # or: run it in the foreground (elevated terminal)
 ```
 
-List the processes under `[processes].names` (file names such as `哔哩哔哩.exe`, or full paths). In Clash Verge, route what the daemon forwards with the rule printed by `seltun rule <proxy-or-group>` (`PROCESS-NAME,seltund.exe,<proxy>`): Clash sees all forwarded traffic as coming from `seltund.exe`. `[upstream].address` is Clash Verge's mixed port (7897 by default).
+List the processes under `[processes].names` (file names such as `哔哩哔哩.exe`, or full paths). Clash sees all forwarded traffic as coming from the process `seltund.exe`. `[upstream].address` is Clash Verge's mixed port (7897 by default).
 
 | What | Windows |
 | --- | --- |
@@ -40,4 +40,4 @@ List the processes under `[processes].names` (file names such as `哔哩哔哩.e
 
 ## Development
 
-`uv sync` installs the CLI in editable mode without building the daemon; `seltun` then uses `native/target/release/`, so run `cargo build --release --manifest-path native/Cargo.toml` after changing the Rust code, and `seltun setup` once for `wintun.dll`. `uv run pytest`, `cargo test --manifest-path native/Cargo.toml`, `uv run format.py` and `uv run type_check.py` are the checks.
+`uv sync` installs the CLI in editable mode without building the daemon; `seltun` then uses `native/target/release/`, so run `cargo build --release --manifest-path native/Cargo.toml` after changing the Rust code, and `seltun init` once for `wintun.dll`. `uv run pytest`, `cargo test --manifest-path native/Cargo.toml`, `uv run format.py` and `uv run type_check.py` are the checks.

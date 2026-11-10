@@ -163,13 +163,13 @@ async fn start(settings: Settings) -> Result<Active> {
 
     if !is_elevated() {
         bail!(
-            "creating the TUN adapter needs an elevated process; run `seltun autostart enable` from an elevated terminal once, then `seltun start`"
+            "creating the TUN adapter needs an elevated process; run `seltun autostart enable` from an elevated terminal once, then `seltun daemon start`"
         );
     }
     let wintun = std::env::current_exe()?.with_file_name("wintun.dll");
     if !wintun.is_file() {
         bail!(
-            "{} is missing; run `seltun setup` to download it",
+            "{} is missing; run `seltun init` to download it",
             wintun.display()
         );
     }

@@ -1,6 +1,6 @@
 //! `state.json`: the persisted on/off switch, shared with the Python CLI.
 //!
-//! The CLI writes it (`seltun on` / `seltun off`) and tells the daemon to reload; the daemon only reads it, so a restart comes back in the state the user left.
+//! The CLI writes it (`seltun switch on` / `seltun switch off`) and tells the daemon to reload; the daemon only reads it, so a restart comes back in the state the user left.
 
 use std::path::Path;
 

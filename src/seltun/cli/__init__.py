@@ -39,6 +39,16 @@ autostart_app = typer.Typer(
     help="Start the daemon at login (an elevated Task Scheduler task).",
 )
 app.add_typer(autostart_app, name="autostart")
+switch_app = typer.Typer(
+    no_args_is_help=True,
+    help="Turn steering on or off (persisted across restarts).",
+)
+app.add_typer(switch_app, name="switch")
+daemon_app = typer.Typer(
+    no_args_is_help=True,
+    help="Run, start or stop the daemon.",
+)
+app.add_typer(daemon_app, name="daemon")
 
 
 @dataclass
@@ -81,19 +91,29 @@ def _root(
 
 
 @app.command()
-def init(
-    ctx: typer.Context,
-    force: bool = typer.Option(False, "--force", help="Overwrite an existing config."),
-) -> None:
-    """Write the example config to the config path, then edit it (list the processes to steer)."""
+def init(ctx: typer.Context) -> None:
+    """Create the config from the example if it is missing, and download wintun.dll (the TUN driver Clash Verge uses too) next to the daemon if it is missing. Safe to run again."""
     c: Context = ctx.obj
     with handle_errors():
-        if c.config_path.exists() and not force:
-            raise SeltunError(f"{c.config_path} exists; pass --force to overwrite it")
-        c.config_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(EXAMPLE_CONFIG, c.config_path)
-    print_success(f"Wrote {c.config_path}")
-    print_info("List the processes to steer under [processes].names, then `seltun on`")
+        if c.config_path.exists():
+            print_info(f"{c.config_path} already exists; left as it is")
+        else:
+            c.config_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(EXAMPLE_CONFIG, c.config_path)
+            print_success(f"Wrote {c.config_path}")
+            print_info(
+                "List the processes to steer under [processes].names, then `seltun switch on`"
+            )
+        target = daemon_.find_binary().parent
+        if (target / "wintun.dll").is_file():
+            print_info(f"{target / 'wintun.dll'} already exists; left as it is")
+        else:
+            print_step(f"Fetching Wintun into {target}")
+            try:
+                dll = ensure_wintun(target)
+            except (OSError, RuntimeError) as exc:
+                raise SeltunError(f"fetching Wintun: {exc}") from exc
+            print_success(f"Wrote {dll}")
 
 
 @app.command("paths")
@@ -106,23 +126,6 @@ def show_paths(ctx: typer.Context) -> None:
         ("log", paths.daemon_log()),
     ):
         typer.echo(f"{label:<8} {path}")
-
-
-@app.command()
-def setup(
-    force: bool = typer.Option(
-        False, "--force", help="Download again even if present."
-    ),
-) -> None:
-    """Download wintun.dll (the TUN driver Clash Verge uses too) next to the daemon."""
-    with handle_errors():
-        target = daemon_.find_binary().parent
-        print_step(f"Fetching Wintun into {target}")
-        try:
-            dll = ensure_wintun(target, force)
-        except (OSError, RuntimeError) as exc:
-            raise SeltunError(f"fetching Wintun: {exc}") from exc
-    print_success(f"{dll} is in place")
 
 
 def _save_state(c: Context, enabled: bool) -> None:
@@ -148,7 +151,7 @@ def _apply(c: Context, enabled: bool) -> None:
             status = request(c.control, "reload")
         except DaemonNotRunning:
             print_info(
-                f"Saved: seltun is {'on' if enabled else 'off'}. The daemon is not running; the switch applies when it starts (`seltun start`)"
+                f"Saved: seltun is {'on' if enabled else 'off'}. The daemon is not running; the switch applies when it starts (`seltun daemon start`)"
             )
             return
         if status["error"]:
@@ -158,14 +161,14 @@ def _apply(c: Context, enabled: bool) -> None:
     print_success(f"seltun is {_summary(status)}")
 
 
-@app.command()
-def on(ctx: typer.Context) -> None:
+@switch_app.command("on")
+def switch_on(ctx: typer.Context) -> None:
     """Turn steering on; it stays on across restarts of the daemon and the machine."""
     _apply(ctx.obj, True)
 
 
-@app.command()
-def off(ctx: typer.Context) -> None:
+@switch_app.command("off")
+def switch_off(ctx: typer.Context) -> None:
     """Turn steering off (the TUN adapter goes away); it stays off across restarts."""
     _apply(ctx.obj, False)
 
@@ -201,7 +204,7 @@ def status(
         f"switch   {'on' if persisted.enabled else 'off'} (persisted in {c.state_path})"
     )
     if daemon is None:
-        typer.echo("daemon   not running (`seltun start`)")
+        typer.echo("daemon   not running (`seltun daemon start`)")
         return
     typer.echo(
         f"daemon   running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
@@ -214,8 +217,8 @@ def status(
     typer.echo(f"startup  {_autostart_summary(autostart_.registered())}")
 
 
-@app.command()
-def start(ctx: typer.Context) -> None:
+@daemon_app.command("start")
+def daemon_start(ctx: typer.Context) -> None:
     """Start the daemon (through its startup task if there is one, which runs it elevated)."""
     c: Context = ctx.obj
     with handle_errors():
@@ -247,13 +250,13 @@ def start(ctx: typer.Context) -> None:
         pid = daemon_.start_background(argv, c.control, paths.daemon_log())
         if not autostart_.is_admin():
             print_warning(
-                "This terminal is not elevated, so the daemon cannot create the TUN adapter; run `seltun autostart enable` from an elevated terminal once, and `seltun start` will run it elevated from then on"
+                "This terminal is not elevated, so the daemon cannot create the TUN adapter; run `seltun autostart enable` from an elevated terminal once, and `seltun daemon start` will run it elevated from then on"
             )
     print_success(f"The daemon (pid {pid}) is running; it logs to {paths.daemon_log()}")
 
 
-@app.command()
-def stop(ctx: typer.Context) -> None:
+@daemon_app.command("stop")
+def daemon_stop(ctx: typer.Context) -> None:
     """Stop the daemon (the persisted switch is left as it is)."""
     c: Context = ctx.obj
     with handle_errors():
@@ -265,24 +268,13 @@ def stop(ctx: typer.Context) -> None:
     print_success("The daemon is stopping")
 
 
-@app.command()
-def daemon(ctx: typer.Context) -> None:
+@daemon_app.command("run")
+def daemon_run(ctx: typer.Context) -> None:
     """Run the daemon in the foreground until Ctrl+C (needs an elevated terminal to turn on)."""
     c: Context = ctx.obj
     with handle_errors():
         argv = daemon_.command(c.config_path, c.state_path, None)
     raise typer.Exit(daemon_.run(argv))
-
-
-@app.command()
-def rule(
-    ctx: typer.Context,
-    proxy: str = typer.Argument(
-        "PROXY", help="The Clash proxy or group the traffic should go to."
-    ),
-) -> None:
-    """Print the Clash rule that matches the daemon's traffic (every forwarded connection comes from the process seltund.exe)."""
-    typer.echo(f"PROCESS-NAME,{daemon_.DAEMON_EXE},{proxy}")
 
 
 @autostart_app.command("enable")
@@ -294,7 +286,7 @@ def autostart_enable(ctx: typer.Context) -> None:
             daemon_.command(c.config_path, c.state_path, paths.daemon_log())
         )
     print_success(f"The daemon starts at login: {line}")
-    print_info("To start it now, run `seltun start`")
+    print_info("To start it now, run `seltun daemon start`")
 
 
 @autostart_app.command("disable")
