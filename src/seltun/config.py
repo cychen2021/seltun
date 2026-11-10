@@ -42,7 +42,7 @@ def _host_port(what: str, text: str) -> tuple[str, int]:
 
 @dataclass
 class ProcessesConfig:
-    #: Executable file names or full paths, case-insensitive.
+    #: File names of executables, or full paths. Case does not matter.
     names: list[str] = field(default_factory=list)
 
 

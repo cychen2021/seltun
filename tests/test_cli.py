@@ -1,4 +1,4 @@
-"""The CLI against a fake daemon speaking the control protocol, and the pieces around it (config, state, task XML)."""
+"""Tests of the CLI with a fake daemon that speaks the control protocol. They also test the parts around it: config, state, and task XML."""
 
 import json
 import socketserver
@@ -18,7 +18,7 @@ runner = CliRunner()
 
 
 class FakeDaemon:
-    """Answers the control protocol from the state file, as the real daemon does on `reload`."""
+    """A fake daemon. It answers the control protocol from the state file, as the real daemon does at `reload`."""
 
     def __init__(self, state_path, error=None):
         self.state_path = state_path
@@ -95,7 +95,7 @@ def test_on_persists_and_reloads_the_daemon(env):
 
 def test_switch_survives_without_a_daemon(env):
     state, write_config, invoke = env
-    write_config(1)  # nothing listens on port 1
+    write_config(1)  # No program listens on port 1
     result = invoke("switch", "on")
     assert result.exit_code == 0, result.output
     assert "not running" in result.output

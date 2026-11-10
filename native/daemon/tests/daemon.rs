@@ -1,4 +1,4 @@
-//! The two network-facing pieces end to end, with no adapter involved: the upstream client against stub SOCKS5 / HTTP proxies, and the control channel against a real `Daemon`.
+//! Tests of the two parts that use the network, with no adapter. The first part is the client of the upstream, tested against stub SOCKS5 and HTTP proxies. The second part is the control channel, tested against a real `Daemon`.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ fn upstream(address: SocketAddr, protocol: Protocol) -> Upstream {
     }
 }
 
-/// A SOCKS5 proxy that records the requested target, then echoes what it receives upper-cased. For `UDP ASSOCIATE` it hands out the UDP relay at `relay`.
+/// A SOCKS5 proxy. It records the requested target, then returns the data that it receives in upper case. For `UDP ASSOCIATE`, it gives the UDP relay at `relay`.
 async fn stub_socks5(relay: Option<SocketAddr>) -> (SocketAddr, tokio::task::JoinHandle<Vec<u8>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -46,7 +46,7 @@ async fn stub_socks5(relay: Option<SocketAddr>) -> (SocketAddr, tokio::task::Joi
                 reply.extend_from_slice(&relay.ip().octets());
                 reply.extend_from_slice(&relay.port().to_be_bytes());
                 s.write_all(&reply).await.unwrap();
-                // Hold the control connection open until the client closes it.
+                // Keep the control connection open until the client closes it.
                 let mut sink = Vec::new();
                 let _ = s.read_to_end(&mut sink).await;
             },
@@ -114,7 +114,7 @@ async fn http_connect_leaves_the_tunnel_untouched() {
             blank.clear();
             s.read_line(&mut blank).await.unwrap();
         }
-        // The first tunnelled bytes follow the 200 in the same segment.
+        // The first tunneled bytes come after the 200 in the same segment.
         s.get_mut()
             .write_all(b"HTTP/1.1 200 Connection established\r\n\r\nearly")
             .await
@@ -197,7 +197,7 @@ async fn control_reload_follows_the_state_file() {
     assert_eq!(reply["ok"], true);
     assert_eq!(reply["status"]["enabled"], false);
 
-    // Switching on: the persisted switch is picked up. No process is selected, so nothing is started (a test must never create an adapter, elevated or not) and the status says why.
+    // Switch on. The daemon reads the saved switch. No process is selected, thus nothing starts. A test must never create an adapter, with or without administrator rights. The status gives the reason.
     std::fs::write(&state, r#"{"enabled": true}"#).unwrap();
     let reply = ask(address, "reload").await;
     assert_eq!(reply["status"]["enabled"], true);

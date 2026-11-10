@@ -32,7 +32,7 @@ const IP_UNICAST_IF: i32 = 31;
 
 /// True if this process runs with administrator rights. The daemon needs them to create the Wintun adapter and its routes.
 pub fn is_elevated() -> bool {
-    // SAFETY: no arguments, no state.
+    // SAFETY: this call has no arguments and no state.
     unsafe { IsUserAnAdmin() != 0 }
 }
 
@@ -53,11 +53,11 @@ fn fetch_table(mut call: impl FnMut(*mut core::ffi::c_void, &mut u32) -> u32) ->
     let mut buf: Vec<u8> = Vec::new();
     for _ in 0..4 {
         buf.resize(size as usize + 8, 0);
-        // `u64` alignment is not needed: the structs are `repr(C)` of `u32`s and the Vec is 8-aligned by the allocator in practice; read unaligned below to be safe anyway.
+        // The structures are `repr(C)` and have only `u32` fields. In practice, the allocator gives a buffer with 8-byte alignment. The code also reads the rows unaligned, to be safe.
         let code = call(buf.as_mut_ptr().cast(), &mut size);
         match code {
             0 => return Some(buf),
-            122 => continue, // ERROR_INSUFFICIENT_BUFFER: `size` now holds what is needed.
+            122 => continue, // ERROR_INSUFFICIENT_BUFFER: `size` now has the necessary size.
             _ => return None,
         }
     }
@@ -66,12 +66,12 @@ fn fetch_table(mut call: impl FnMut(*mut core::ffi::c_void, &mut u32) -> u32) ->
 
 fn tcp_rows() -> Vec<Row> {
     let Some(buf) = fetch_table(|ptr, size| {
-        // SAFETY: `ptr` points at a buffer of `*size` bytes owned by `fetch_table`.
+        // SAFETY: `ptr` points to a buffer of `*size` bytes. `fetch_table` owns the buffer.
         unsafe { GetExtendedTcpTable(ptr, size, 0, AF_INET as u32, TCP_TABLE_OWNER_PID_ALL, 0) }
     }) else {
         return Vec::new();
     };
-    // SAFETY: the call succeeded, so the buffer holds `dwNumEntries` rows after the count.
+    // SAFETY: the call succeeded. Thus the buffer has `dwNumEntries` rows after the count.
     unsafe {
         let table = buf.as_ptr().cast::<MIB_TCPTABLE_OWNER_PID>();
         let n = (*table).dwNumEntries as usize;
@@ -94,12 +94,12 @@ fn tcp_rows() -> Vec<Row> {
 
 fn udp_rows() -> Vec<Row> {
     let Some(buf) = fetch_table(|ptr, size| {
-        // SAFETY: as in `tcp_rows`.
+        // SAFETY: same as in `tcp_rows`.
         unsafe { GetExtendedUdpTable(ptr, size, 0, AF_INET as u32, UDP_TABLE_OWNER_PID, 0) }
     }) else {
         return Vec::new();
     };
-    // SAFETY: as in `tcp_rows`.
+    // SAFETY: same as in `tcp_rows`.
     unsafe {
         let table = buf.as_ptr().cast::<MIB_UDPTABLE_OWNER_PID>();
         let n = (*table).dwNumEntries as usize;
@@ -125,7 +125,7 @@ fn image_of(pid: u32) -> Option<String> {
     if pid == 0 || pid == 4 {
         return None;
     }
-    // SAFETY: the handle is closed before returning, and the buffer length is passed in.
+    // SAFETY: the code closes the handle before it returns. The call receives the length of the buffer.
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {
@@ -225,7 +225,7 @@ impl Owners {
 /// The index of the physical interface. It has the default route with the lowest metric and is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect.
 pub fn physical_interface(exclude: u32) -> Option<u32> {
     let mut table: *mut MIB_IPFORWARD_TABLE2 = std::ptr::null_mut();
-    // SAFETY: on success `table` is a block IP Helper allocated, freed below; rows are read within `NumEntries`.
+    // SAFETY: if the call succeeds, `table` is a block that IP Helper allocated. The code frees it below. The code reads rows only inside `NumEntries`.
     unsafe {
         if GetIpForwardTable2(AF_INET, &mut table) != 0 || table.is_null() {
             return None;
@@ -248,7 +248,7 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
             if GetIpInterfaceEntry(&mut iface) != 0 {
                 continue;
             }
-            // A disconnected adapter (a TAP with a stale default route, say) keeps its route and often a better metric; only one that is up and connected counts.
+            // A disconnected adapter keeps its route and often has a better metric. An example is a TAP adapter with an old default route. Only an adapter that is up and connected counts.
             let mut link: MIB_IF_ROW2 = std::mem::zeroed();
             link.InterfaceIndex = row.InterfaceIndex;
             if GetIfEntry2(&mut link) != 0 || link.OperStatus != 1 || link.MediaConnectState == 2 {
@@ -266,9 +266,9 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
 
 /// Pin `socket` to the interface `index` (`IP_UNICAST_IF`). The traffic of the socket leaves through this interface, although the TUN routes cover all destinations.
 pub fn bind_to_interface<S: AsRawSocket>(socket: &S, index: u32) -> Result<()> {
-    // IPv4 takes the index in network byte order.
+    // For IPv4, the index is in network byte order.
     let value = index.to_be();
-    // SAFETY: `value` outlives the call and its size is passed.
+    // SAFETY: `value` is valid during the call, and the call receives its size.
     let code = unsafe {
         setsockopt(
             socket.as_raw_socket() as usize,
@@ -358,7 +358,7 @@ mod tests {
     fn finds_this_process_as_the_owner_of_its_listener() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let local = listener.local_addr().unwrap();
-        // A listening socket has remote 0.0.0.0:0; ask as UDP-style (port only) via a connected pair instead.
+        // A listening socket has the remote address 0.0.0.0:0. Thus the test uses a connected pair.
         let client = std::net::TcpStream::connect(local).unwrap();
         let (_server, _) = listener.accept().unwrap();
         let owners = Owners::default();
@@ -371,14 +371,14 @@ mod tests {
 
     #[test]
     fn finds_a_default_interface() {
-        // Offline machines have none; online ones must name a real index.
+        // A computer that is offline has no default route. A computer that is online must give a real index.
         if let Some(index) = physical_interface(u32::MAX) {
             assert!(index > 0);
-            // Regression: a disconnected TAP adapter with a stale default route once won on metric.
+            // Regression test: a disconnected TAP adapter with an old default route once had the lowest metric.
             let mut link: MIB_IF_ROW2 = unsafe { std::mem::zeroed() };
             link.InterfaceIndex = index;
             assert_eq!(unsafe { GetIfEntry2(&mut link) }, 0);
-            assert_eq!(link.OperStatus, 1, "interface {index} is not up");
+            assert_eq!(link.OperStatus, 1, "The interface {index} is not up.");
         }
     }
 

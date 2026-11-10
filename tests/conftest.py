@@ -1,6 +1,6 @@
 """Shared pytest configuration.
 
-Typer renders help and error output with Rich; a narrow inherited ``COLUMNS`` or a forced color mode makes ``CliRunner`` substring assertions unstable, so both are pinned here for every test.
+Typer shows help and error output with Rich. A narrow ``COLUMNS`` value from the environment, or a forced color mode, makes the substring assertions of ``CliRunner`` unstable. Thus this file sets both values for each test.
 """
 
 import os
@@ -20,5 +20,5 @@ _pin_cli_output_env()
 
 @pytest.fixture(autouse=True)
 def _stable_cli_output():
-    """Re-pin the width/color env for every test (see the module docstring)."""
+    """Set the width and color values again for each test (see the module docstring)."""
     _pin_cli_output_env()

@@ -1,6 +1,6 @@
 //! The control logic of the daemon. It makes what is running the same as what the user selected (`state.json` and `config.toml`).
 //!
-//! "On" means that a TUN adapter, its routes, and the forwarding task are present. "Off" means that they are not present, and the daemon only answers on the control channel. [`Daemon::reload`] is the only entry point. The CLI writes the state file and then calls it. The startup also calls it one time, to get the saved state.
+//! "On" means that a TUN adapter, its routes, and the task that forwards the flows are present. "Off" means that they are not present, and the daemon only answers on the control channel. [`Daemon::reload`] is the only entry point. The CLI writes the state file and then calls it. The startup also calls it one time, to get the saved state.
 
 use std::sync::{Arc, Mutex};
 
@@ -18,7 +18,7 @@ pub struct Status {
     pub pid: u32,
     /// The state that the user selected (the saved switch).
     pub enabled: bool,
-    /// True if the TUN adapter and the forwarding are up.
+    /// True if the TUN adapter is up and the daemon forwards the flows.
     pub active: bool,
     /// The reason why the daemon is not in the selected state, if it is not.
     pub error: Option<String>,
@@ -83,7 +83,7 @@ impl Daemon {
                 }
             },
             (state, settings) => {
-                // Keep what is running; a typo in the config must not drop the user's traffic.
+                // Do not change what runs. A typo in the config must not stop the traffic of the user.
                 let error = state.err().or(settings.err()).map(|e| format!("{e:#}"));
                 tracing::error!("{}", error.as_deref().unwrap_or_default());
                 inner.error = error;
@@ -179,7 +179,7 @@ async fn start(settings: Settings) -> Result<Active> {
     config
         .tun_name(&settings.tun.name)
         .address(settings.tun.address)
-        // A /30: the adapter's own address and a nominal peer; the half-default routes are what send traffic in.
+        // A /30 network: the address of the adapter and a nominal peer. The half-default routes send the traffic into the adapter.
         .netmask(Ipv4Addr::new(255, 255, 255, 252))
         .mtu(settings.tun.mtu)
         .up();
@@ -207,7 +207,7 @@ async fn start(settings: Settings) -> Result<Active> {
             tracing::error!("The data path failed: {error:#}");
             *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
         }
-        // The adapter is gone with the stack; the routes go with it, explicitly too.
+        // The adapter goes away with the stack, and the routes go with it. The code also removes the routes, to be sure.
         drop(routes);
     });
     Ok(Active {

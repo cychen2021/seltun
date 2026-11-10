@@ -15,7 +15,7 @@ __all__ = ["State"]
 
 @dataclass
 class State:
-    #: Whether the selected processes are steered into the TUN adapter.
+    #: If true, the daemon steers the selected processes into the TUN adapter.
     enabled: bool = False
 
     @classmethod

@@ -9,7 +9,7 @@ import sys
 
 from loguru import logger as _loguru
 
-# We manage every sink explicitly; drop loguru's default stderr sink.
+# The code manages each sink. Remove the default stderr sink of loguru.
 _loguru.remove()
 _sink_id: int | None = None
 
@@ -21,7 +21,7 @@ def configure(verbose: bool = False) -> None:
         _loguru.remove(_sink_id)
         _sink_id = None
     if sys.stderr is None:
-        # Without a console there is no stderr; stay silent.
+        # Without a console there is no stderr. Write no messages.
         return
     _sink_id = _loguru.add(
         sys.stderr,

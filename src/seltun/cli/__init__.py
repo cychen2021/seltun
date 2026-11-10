@@ -327,7 +327,7 @@ def _autostart_summary(line: str | None) -> str:
 
 
 def main() -> None:
-    # Status prefixes are emoji; a legacy Windows console codepage (cp1252) cannot encode them.
+    # The status prefixes use emoji. A legacy Windows console code page (cp1252) cannot encode them.
     for stream in (sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOWrapper):
             stream.reconfigure(encoding="utf-8")

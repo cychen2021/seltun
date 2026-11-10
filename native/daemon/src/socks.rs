@@ -1,6 +1,6 @@
 //! The client of the mixed port of Clash: SOCKS5 (`CONNECT` and `UDP ASSOCIATE`) and HTTP `CONNECT`.
 //!
-//! The daemon makes each connection to the upstream from its own process. Thus Clash (which matches the connecting process) sees all forwarded traffic as traffic of `seltund.exe`. A target is always an IP address, because the TUN sees only what the process already resolved.
+//! The daemon makes each connection to the upstream from its own process. Thus Clash (which matches the process of the connection) sees all forwarded traffic as traffic of `seltund.exe`. A target is always an IP address, because the TUN sees only what the process already resolved.
 
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -108,7 +108,7 @@ async fn socks5_command(
 async fn http_connect(stream: &mut TcpStream, target: SocketAddr) -> Result<()> {
     let request = format!("CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n\r\n");
     stream.write_all(request.as_bytes()).await?;
-    // Read byte by byte up to the blank line, so none of the tunnelled stream is consumed.
+    // Read one byte at a time up to the blank line. Thus the code does not read the tunneled stream.
     let mut head = Vec::new();
     while !head.ends_with(b"\r\n\r\n") {
         if head.len() > 8192 {

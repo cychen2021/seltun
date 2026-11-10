@@ -18,7 +18,7 @@ import sys
 
 PROJECT_ROOT = os.path.realpath(os.path.dirname(__file__))
 
-# Markdown directories that hold lintable docs (the precise globs/ignores live in `.markdownlint-cli2.jsonc`).
+# The Markdown directories that have docs to lint. `.markdownlint-cli2.jsonc` has the exact globs and ignores.
 MD_DIRS = ("docs", ".vscode")
 
 
@@ -73,7 +73,7 @@ def format_markdown() -> None:
     if cmd is None:
         print("markdownlint-cli2 not found (and no npx); skipping Markdown formatting.")
         return
-    # `--fix` applies auto-fixes; file selection comes from `.markdownlint-cli2.jsonc`.
+    # `--fix` applies the automatic fixes. `.markdownlint-cli2.jsonc` selects the files.
     _run([*cmd, "--fix"])
 
 

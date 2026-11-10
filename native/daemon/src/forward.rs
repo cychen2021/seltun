@@ -1,6 +1,6 @@
 //! The data path. A userspace TCP/IP stack (`ipstack`) ends the flows that arrive in the TUN adapter. In the TUN mode of Clash Verge, gVisor does this work. Then the daemon forwards the flows.
 //!
-//! The daemon finds the process of each flow in the socket tables. If the process is selected, the daemon sends the flow to the port of Clash. If not, the flow leaves through the physical interface without a change. A socket that is pinned to that interface carries it, as `auto-detect-interface` of Clash does. Thus the daemon proxies only the selected processes.
+//! The daemon finds the process of each flow in the socket tables. If the process is selected, the daemon sends the flow to the port of Clash. If not, the flow leaves through the physical interface without a change. A socket that the daemon pins to that interface carries it, as `auto-detect-interface` of Clash does. Thus the daemon proxies only the selected processes.
 
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -156,8 +156,8 @@ async fn handle_udp<S>(mut flow: S, src: SocketAddr, dst: SocketAddr, ctx: Arc<C
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    // Only unicast IPv4 is routed into the TUN; the adapter's own IPv6 chatter is not forwarded.
-    // Multicast and broadcast (SSDP, LLMNR, mDNS) have no destination to relay to.
+    // Only unicast IPv4 goes into the TUN. The IPv6 messages of the adapter itself are not forwarded.
+    // Multicast and broadcast (SSDP, LLMNR, mDNS) have no destination for a relay.
     let local_only = match dst.ip() {
         std::net::IpAddr::V4(ip) => ip.is_multicast() || ip.is_broadcast(),
         std::net::IpAddr::V6(_) => true,
@@ -169,7 +169,7 @@ where
     let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Udp, src, dst))
         .await
         .unwrap_or(Verdict::Direct);
-    // Without UDP through Clash, a selected process's DNS goes direct and its other UDP (QUIC, ...) is dropped, so the application falls back to TCP.
+    // If UDP does not go through Clash, the DNS of a selected process goes direct, and the daemon drops its other UDP (QUIC, for example). The application then changes to TCP.
     let through_clash = verdict == Verdict::Proxy && ctx.upstream.udp;
     if verdict == Verdict::Proxy && !through_clash && dst.port() != 53 {
         return;

@@ -29,7 +29,7 @@ fn init_logging(cli: &Cli) -> Result<()> {
                 .with_writer(Mutex::new(file))
                 .init();
         },
-        // Colors only on a terminal; otherwise stderr is a pipe or file.
+        // Use colors only in a terminal. Otherwise stderr is a pipe or a file.
         None => builder
             .with_writer(std::io::stderr)
             .with_ansi(std::io::stderr().is_terminal())
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
 
     let daemon = Arc::new(Daemon::new(cli));
     let quit = Arc::new(Notify::new());
-    // Come back in the state the user left: the persisted on/off switch.
+    // Start in the state that the user selected: the saved on/off switch.
     daemon.reload().await;
 
     tokio::select! {
