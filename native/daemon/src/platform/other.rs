@@ -1,4 +1,4 @@
-//! Stand-ins for non-Windows targets: the daemon is Windows-only, this keeps the rest compiling and testable.
+//! Stand-ins for systems other than Windows. The daemon works on Windows only. The stand-ins let the rest of the code compile and test.
 
 use std::io::{Error, ErrorKind, Result};
 use std::net::SocketAddr;
@@ -27,7 +27,7 @@ pub fn physical_interface(_exclude: u32) -> Option<u32> {
     None
 }
 
-/// Pin `socket` to the interface with this index, so its traffic bypasses the TUN routes.
+/// Pin `socket` to the interface with this index. The traffic of the socket then does not use the TUN routes.
 pub fn bind_to_interface<S>(_socket: &S, _index: u32) -> Result<()> {
     Ok(())
 }
@@ -38,7 +38,7 @@ impl Routes {
     pub fn install(_tun_index: u32) -> Result<Self> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "seltund steers traffic on Windows only",
+            "seltund works on Windows only.",
         ))
     }
 }

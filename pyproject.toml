@@ -1,14 +1,14 @@
 [project]
 name = "seltun"
 version = "0.1.0"
-description = "Steer selected Windows processes into a TUN adapter and forward them to Clash Verge's local port"
+description = "Steer selected Windows processes into a TUN adapter and forward them to the local port of Clash Verge"
 readme = "README.md"
 authors = [
     { name = "Chuyang Chen", email = "chuyangchen2018@outlook.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
-    # CLI framework (built on click, which it pulls in transitively).
+    # CLI framework. It is built on click, which uv also installs.
     "typer>=0.12.0",
     "loguru>=0.7.2",
     "rich>=14.1.0",
@@ -26,7 +26,7 @@ dev = [
 seltun = "seltun:main"
 
 [build-system]
-# hatchling with a build hook (`hatch_build.py`), not uv_build: the wheel carries the Rust daemon binary (`native/daemon/`) and wintun.dll inside the package, so `uv tool install` builds and installs everything. Building needs a Rust toolchain and network access (for Wintun).
+# hatchling with a build hook (`hatch_build.py`), not uv_build. The wheel has the Rust daemon binary (`native/daemon/`) and wintun.dll in the package. Thus `uv tool install` builds and installs everything. The build needs a Rust toolchain and network access (for Wintun).
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
@@ -36,7 +36,7 @@ packages = ["src/seltun"]
 [tool.hatch.build.hooks.custom]
 
 [tool.uv]
-# Rebuild the project (and so the daemon) when Rust sources change, not only Python metadata.
+# Build the project (and the daemon) again when the Rust sources change, not only when the Python metadata changes.
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "native/**/*.rs" },

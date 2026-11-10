@@ -1,6 +1,6 @@
-"""Shared CLI error handling.
+"""Shared error handling of the CLI.
 
-Command bodies wrap their work in :func:`handle_errors` so an expected :class:`~seltun.support.errors.SeltunError` is logged and turned into a clean non-zero exit, instead of repeating the same ``try/except`` in every command.
+A command body wraps its work in :func:`handle_errors`. The function logs an expected :class:`~seltun.support.errors.SeltunError` and ends the command with a clean non-zero exit code. Thus each command does not need its own ``try/except``.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ __all__ = ["handle_errors"]
 
 @contextmanager
 def handle_errors() -> Iterator[None]:
-    """Log a :class:`SeltunError` and exit non-zero, leaving other errors to propagate."""
+    """Log a :class:`SeltunError` and exit with a non-zero code. Other errors continue up."""
     try:
         yield
     except SeltunError as exc:

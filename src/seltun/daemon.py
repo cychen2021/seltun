@@ -1,6 +1,8 @@
-"""Finding and launching ``seltund``, the Rust daemon (``docs/daemon.md``).
+"""Find and start ``seltund``, the Rust daemon (``docs/daemon.md``).
 
-The wheel ships the binary and ``wintun.dll`` at ``seltun/bin/`` (``hatch_build.py``); a source checkout falls back to ``native/target/release/``. The daemon is told absolute ``--config`` / ``--state`` paths, so it depends on neither ``PATH`` nor the working directory. Its executable name is also what Clash sees: every connection it forwards comes from the process ``seltund.exe``.
+The wheel has the binary and ``wintun.dll`` in ``seltun/bin/`` (``hatch_build.py``). In a source checkout, the fallback is ``native/target/release/``. The CLI gives the daemon absolute ``--config`` and ``--state`` paths. Thus the daemon does not depend on ``PATH`` or on the working directory.
+
+The name of the executable is important: Clash sees each forwarded connection as a connection of the process ``seltund.exe``.
 """
 
 from __future__ import annotations
@@ -35,12 +37,12 @@ def find_binary() -> Path:
     if found := shutil.which(DAEMON_EXE):
         return Path(found)
     raise SeltunError(
-        f"{DAEMON_EXE} not found: install with `uv tool install`, or in a checkout run `cargo build --release --manifest-path native/Cargo.toml`"
+        f"{DAEMON_EXE} is not found. Install with `uv tool install`. In a checkout, run `cargo build --release --manifest-path native/Cargo.toml`."
     )
 
 
 def command(config: Path, state: Path, log: Path | None) -> list[str]:
-    """The daemon's command line against the given config and state; with ``log`` it appends its log there."""
+    """The command line of the daemon for the given config file and state file. If ``log`` is set, the daemon adds its log to that file."""
     argv = [
         str(find_binary()),
         "--config",
@@ -54,7 +56,7 @@ def command(config: Path, state: Path, log: Path | None) -> list[str]:
 
 
 def run(argv: list[str]) -> int:
-    """Run the daemon in the foreground until it exits; Ctrl+C reaches it too, so give it a moment to tear the adapter down."""
+    """Run the daemon in the foreground until it stops. Ctrl+C also reaches the daemon. Thus the code waits for the daemon to remove the adapter."""
     process = subprocess.Popen(argv)
     try:
         return process.wait()
@@ -67,9 +69,11 @@ def run(argv: list[str]) -> int:
 
 
 def start_background(argv: list[str], control: tuple[str, int], log: Path) -> int:
-    """Start the daemon detached from this console and return its pid once its control port answers.
+    """Start the daemon in a separate process and return its pid when its control port answers.
 
-    It gets its own process group, so closing the terminal does not take it down; on Windows it also leaves this process's job when the job allows that. It needs to be elevated to create the TUN adapter, so from a normal terminal it runs but cannot turn on (`seltun status` says why); the scheduled task of `seltun autostart enable` is the elevated way.
+    The daemon gets its own process group. Thus the daemon continues when you close the terminal. On Windows, the daemon also leaves the job of this process, if the job permits it.
+
+    The daemon must be elevated to create the TUN adapter. In a terminal that is not elevated, the daemon runs but cannot turn on. ``seltun status`` shows the reason. The elevated way is the scheduled task of ``seltun autostart enable``.
     """
     log.parent.mkdir(parents=True, exist_ok=True)
     options: dict = {
@@ -93,7 +97,7 @@ def start_background(argv: list[str], control: tuple[str, int], log: Path) -> in
     while time.monotonic() < deadline:
         if (code := process.poll()) is not None:
             raise SeltunError(
-                f"the daemon exited at once ({code}); run `seltun daemon run` to see why, or check {log}"
+                f"The daemon stopped immediately (code {code}). Run `seltun daemon run` to see the reason, or read {log}."
             )
         try:
             request(control, "ping", timeout=1)
@@ -101,5 +105,5 @@ def start_background(argv: list[str], control: tuple[str, int], log: Path) -> in
         except DaemonNotRunning:
             time.sleep(0.2)
     raise SeltunError(
-        f"the daemon (pid {process.pid}) does not answer on {control[0]}:{control[1]} after 10 s; see {log}"
+        f"The daemon (pid {process.pid}) does not answer on {control[0]}:{control[1]} after 10 seconds. See {log}."
     )

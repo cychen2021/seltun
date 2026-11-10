@@ -1,6 +1,6 @@
-"""Persistent on/off state, shared with the daemon.
+"""Persistent switch state. The daemon also reads it.
 
-``seltun switch on`` / ``seltun switch off`` write it; the daemon reads it at start and on every ``reload``, so the switch survives restarts of the daemon and of the machine. No file means off.
+``seltun switch on`` and ``seltun switch off`` write the file. The daemon reads it at startup and at each ``reload``. Thus the switch keeps its state when the daemon or the computer starts again. If the file is missing, the switch is off.
 """
 
 from __future__ import annotations

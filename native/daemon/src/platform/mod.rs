@@ -1,6 +1,6 @@
-//! What the daemon needs from the operating system: who owns a socket, which interface is the real one, and the routes that send traffic into the TUN adapter.
+//! The services that the daemon needs from the operating system: the owner of a socket, the physical interface, and the routes that send traffic into the TUN adapter.
 //!
-//! Windows only; elsewhere every function reports "nothing found", so the pure logic builds and tests anywhere.
+//! The code works on Windows only. On other systems, each function reports that it found nothing. Thus the pure logic builds and tests on each system.
 
 #[cfg(windows)]
 mod windows;

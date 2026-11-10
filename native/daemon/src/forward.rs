@@ -1,6 +1,6 @@
-//! The data path: flows that arrive in the TUN adapter are terminated by a userspace TCP/IP stack (`ipstack`, the role gVisor plays in Clash Verge's TUN) and forwarded.
+//! The data path. A userspace TCP/IP stack (`ipstack`) ends the flows that arrive in the TUN adapter. In the TUN mode of Clash Verge, gVisor does this work. Then the daemon forwards the flows.
 //!
-//! Each flow's owning process is looked up from the socket tables. A selected process's flow goes to Clash's port; everything else goes out the real interface unchanged (a socket pinned to it, as Clash's `auto-detect-interface` does), so only the selected processes are proxied.
+//! The daemon finds the process of each flow in the socket tables. If the process is selected, the daemon sends the flow to the port of Clash. If not, the flow leaves through the physical interface without a change. A socket that is pinned to that interface carries it, as `auto-detect-interface` of Clash does. Thus the daemon proxies only the selected processes.
 
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -18,24 +18,24 @@ use crate::matcher::Matcher;
 use crate::platform::{self, Owners, Proto};
 use crate::socks::{self, UdpAssociation};
 
-/// How long a flow may stay idle before it is closed.
+/// The time that a flow can be idle before the daemon closes it.
 const UDP_IDLE: Duration = Duration::from_secs(60);
-/// How long the real interface is remembered before it is looked up again.
+/// The time that the daemon keeps the physical interface before it looks for it again.
 const IFACE_TTL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
     /// Through Clash.
     Proxy,
-    /// Out the real interface, untouched.
+    /// Out through the physical interface, without a change.
     Direct,
 }
 
-/// What the flows are decided and forwarded with.
+/// The data that the daemon uses to decide on a flow and to forward it.
 pub struct Context {
     pub upstream: Upstream,
     pub matcher: Matcher,
-    /// Interface index of the TUN adapter, which the real interface is looked up around.
+    /// The interface index of the TUN adapter. The search for the physical interface excludes it.
     pub tun_index: u32,
     owners: Owners,
     interface: Mutex<Option<(Instant, Option<u32>)>>,
@@ -52,7 +52,7 @@ impl Context {
         }
     }
 
-    /// Proxy a flow iff the process that owns its source socket is selected; a flow whose owner cannot be found goes direct.
+    /// Proxy a flow only if the process that owns its source socket is selected. If the daemon does not find the owner, the flow goes direct.
     pub fn verdict(&self, proto: Proto, src: SocketAddr, dst: SocketAddr) -> Verdict {
         let remote = (proto == Proto::Tcp).then_some(dst);
         match self.owners.image(proto, src, remote) {
@@ -80,14 +80,14 @@ impl Context {
         let index = self.real_interface().ok_or_else(|| {
             Error::new(
                 ErrorKind::NotConnected,
-                "no network interface besides the TUN",
+                "There is no network interface other than the TUN.",
             )
         })?;
         socket.pin(index)
     }
 }
 
-/// A socket that can be pinned to an interface.
+/// A socket that the daemon can pin to an interface.
 trait SocketPin {
     fn pin(&self, index: u32) -> IoResult<()>;
 }
@@ -119,7 +119,7 @@ async fn connect_direct(ctx: &Context, dst: SocketAddr) -> IoResult<TcpStream> {
         SocketAddr::V6(_) => {
             return Err(Error::new(
                 ErrorKind::Unsupported,
-                "IPv6 is not routed into the TUN",
+                "IPv6 does not go into the TUN.",
             ));
         },
     };
@@ -142,7 +142,7 @@ where
     let mut upstream = match upstream {
         Ok(stream) => stream,
         Err(error) => {
-            tracing::debug!(%dst, ?verdict, "connect failed: {error}");
+            tracing::debug!(%dst, ?verdict, "Connection failed: {error}");
             let _ = flow.shutdown().await;
             return;
         },
@@ -180,7 +180,7 @@ where
         relay_udp_direct(&mut flow, dst, &ctx).await
     };
     if let Err(error) = result {
-        tracing::debug!(%dst, "udp flow ended: {error}");
+        tracing::debug!(%dst, "UDP flow ended: {error}");
     }
     let _ = flow.shutdown().await;
 }
@@ -231,7 +231,7 @@ where
     }
 }
 
-/// Answer pings locally, as Clash's TUN does: a real ICMP echo cannot be forwarded from userspace.
+/// Answer a ping in the daemon. A userspace program cannot forward an ICMP echo. The TUN mode of Clash does the same.
 fn echo_reply(payload: &[u8]) -> Option<Vec<u8>> {
     use etherparse::{Icmpv4Header, Icmpv4Type};
     let (header, body) = Icmpv4Header::from_slice(payload).ok()?;
@@ -245,7 +245,7 @@ fn echo_reply(payload: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// Serve the flows that arrive on `device` until `stop` fires or the device fails.
+/// Serve the flows that arrive on `device`. The function stops when `stop` is set or when the device fails.
 pub async fn run<D>(
     device: D,
     ctx: Arc<Context>,

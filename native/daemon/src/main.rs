@@ -23,7 +23,7 @@ fn init_logging(cli: &Cli) -> Result<()> {
                 .create(true)
                 .append(true)
                 .open(path)
-                .with_context(|| format!("opening {}", path.display()))?;
+                .with_context(|| format!("Cannot open {}", path.display()))?;
             builder
                 .with_ansi(false)
                 .with_writer(Mutex::new(file))
@@ -46,11 +46,11 @@ async fn main() -> Result<()> {
     let settings = Settings::load(&cli.config)?;
     let listener = TcpListener::bind(settings.control).await.with_context(|| {
         format!(
-            "binding the control port {} (is seltund already running?)",
+            "Cannot bind the control port {}. Is seltund already running?",
             settings.control
         )
     })?;
-    tracing::info!(control = %settings.control, "seltund started");
+    tracing::info!(control = %settings.control, "seltund started.");
 
     let daemon = Arc::new(Daemon::new(cli));
     let quit = Arc::new(Notify::new());
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
 
     tokio::select! {
         _ = control::serve(listener, daemon.clone(), quit.clone()) => {},
-        _ = quit.notified() => tracing::info!("shutdown requested"),
+        _ = quit.notified() => tracing::info!("The CLI requested a shutdown."),
         _ = tokio::signal::ctrl_c() => tracing::info!("interrupted"),
     }
     daemon.stop().await;

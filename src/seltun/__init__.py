@@ -1,6 +1,6 @@
-"""seltun — steer selected processes into a TUN adapter and forward them to Clash.
+"""seltun: steer selected processes into a TUN adapter and forward them to Clash.
 
-The command-line interface lives in the :mod:`seltun.cli` package; ``main`` is the console-script entry point. The daemon itself is the Rust binary ``seltund`` (``native/daemon/``).
+The command-line interface is in the :mod:`seltun.cli` package. ``main`` is the entry point of the console script. The daemon is the Rust binary ``seltund`` (``native/daemon/``).
 """
 
 from ._version import __version__

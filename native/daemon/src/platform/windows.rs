@@ -1,6 +1,6 @@
-//! Windows: IP Helper for socket owners and the real default interface, `netsh` for routes.
+//! Windows code. IP Helper gives the owners of sockets and the physical default interface. `netsh` sets the routes.
 //!
-//! This is the one module with `unsafe`: every block is a plain call into IP Helper / Winsock with a buffer owned here.
+//! This is the only module with `unsafe`. Each block is a plain call into IP Helper or Winsock with a buffer that this module owns.
 
 #![allow(unsafe_code)]
 
@@ -30,13 +30,13 @@ use super::Proto;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const IP_UNICAST_IF: i32 = 31;
 
-/// Whether this process runs elevated: creating the Wintun adapter and its routes needs it.
+/// True if this process runs with administrator rights. The daemon needs them to create the Wintun adapter and its routes.
 pub fn is_elevated() -> bool {
     // SAFETY: no arguments, no state.
     unsafe { IsUserAnAdmin() != 0 }
 }
 
-/// `(local address, local port, remote address, remote port, pid)` of every socket of one protocol; UDP has no remote.
+/// A row with `(local address, local port, remote address, remote port, pid)` for a socket. UDP has no remote address.
 type Row = (Ipv4Addr, u16, Ipv4Addr, u16, u32);
 
 fn port(raw: u32) -> u16 {
@@ -47,7 +47,7 @@ fn ip(raw: u32) -> Ipv4Addr {
     Ipv4Addr::from(u32::from_be(raw))
 }
 
-/// Call an IP Helper table function twice, first for the size.
+/// Call an IP Helper table function two times. The first call gives the size.
 fn fetch_table(mut call: impl FnMut(*mut core::ffi::c_void, &mut u32) -> u32) -> Option<Vec<u8>> {
     let mut size = 0u32;
     let mut buf: Vec<u8> = Vec::new();
@@ -120,7 +120,7 @@ fn udp_rows() -> Vec<Row> {
     }
 }
 
-/// The full path of the executable of `pid`, if it can be opened (system processes and protected ones cannot).
+/// The full path of the executable of `pid`. If the process cannot be opened, the result is none. System processes and protected processes cannot be opened.
 fn image_of(pid: u32) -> Option<String> {
     if pid == 0 || pid == 4 {
         return None;
@@ -145,7 +145,7 @@ struct Snapshot {
     udp: Vec<Row>,
 }
 
-/// Who owns a socket: a cached snapshot of the TCP / UDP tables, refreshed when a lookup misses (a connection is only a few milliseconds old when its first packet arrives) or the hit is old (a port may have been reused).
+/// The owner of a socket. This type keeps a snapshot of the TCP and UDP tables. It makes a new snapshot if a lookup finds nothing, because a new connection is only a few milliseconds old when its first packet arrives. It also makes a new snapshot if the hit is old, because a port can have a new owner.
 pub struct Owners {
     snapshot: Mutex<Option<Snapshot>>,
 }
@@ -185,7 +185,7 @@ impl Owners {
             .map(|row| row.4)
     }
 
-    /// The executable of the process that owns the socket `local` (to `remote`, for TCP).
+    /// The executable of the process that owns the socket `local`. For TCP, the lookup also uses `remote`.
     pub fn image(
         &self,
         proto: Proto,
@@ -222,7 +222,7 @@ impl Owners {
     }
 }
 
-/// The interface index of the best default route that is not `exclude` (the TUN adapter): where traffic that must stay off the TUN is sent. Re-evaluated on every call, as Wi-Fi and Ethernet come and go.
+/// The index of the physical interface. It has the default route with the lowest metric and is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect.
 pub fn physical_interface(exclude: u32) -> Option<u32> {
     let mut table: *mut MIB_IPFORWARD_TABLE2 = std::ptr::null_mut();
     // SAFETY: on success `table` is a block IP Helper allocated, freed below; rows are read within `NumEntries`.
@@ -264,7 +264,7 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
     }
 }
 
-/// Pin `socket` to the interface `index` (`IP_UNICAST_IF`), so its traffic leaves there even though the TUN routes cover every destination.
+/// Pin `socket` to the interface `index` (`IP_UNICAST_IF`). The traffic of the socket leaves through this interface, although the TUN routes cover all destinations.
 pub fn bind_to_interface<S: AsRawSocket>(socket: &S, index: u32) -> Result<()> {
     // IPv4 takes the index in network byte order.
     let value = index.to_be();
@@ -302,7 +302,7 @@ fn netsh(args: &[&str]) -> Result<()> {
     }
 }
 
-/// The two half-default routes (`0.0.0.0/1`, `128.0.0.0/1`) that send every destination without a more specific route (LAN, loopback, the TUN's own subnet) into the TUN adapter, the way Clash Verge's `auto-route` does; with them a process's packets leave from the TUN's own address. Dropped with the adapter, and removed explicitly on shutdown.
+/// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. The `auto-route` of Clash Verge does the same. With these routes, the packets of a process leave from the address of the TUN. The routes go away with the adapter. The code also removes them when the daemon stops.
 pub struct Routes {
     interface: String,
 }

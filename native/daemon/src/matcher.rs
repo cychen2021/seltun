@@ -1,6 +1,6 @@
-//! Which processes are selected.
+//! The selected processes.
 //!
-//! An entry is either a file name (`chrome.exe`), matched against the executable's file name, or a full path (anything with a separator), matched against the whole path. Both are case-insensitive, as Windows file names are.
+//! An entry is a file name (`chrome.exe`) or a full path (an entry with a separator). A file name must be the same as the file name of the executable. A full path must be the same as the whole path. Case does not matter, as for Windows file names.
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Matcher {
@@ -33,7 +33,7 @@ impl Matcher {
         self.names.is_empty() && self.paths.is_empty()
     }
 
-    /// Whether the executable at `image` (a full path) is selected.
+    /// True if the executable at `image` (a full path) is selected.
     pub fn matches(&self, image: &str) -> bool {
         let image = normalize(image);
         let file = image.rsplit('\\').next().unwrap_or(&image);

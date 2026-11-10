@@ -1,6 +1,6 @@
-//! `seltund`, the seltun daemon: steers selected processes into a TUN adapter and forwards them to Clash.
+//! `seltund`, the seltun daemon. It steers selected processes into a TUN adapter and forwards them to Clash.
 //!
-//! See `docs/daemon.md` for the design.
+//! See `docs/daemon.md` for more information.
 
 pub mod config;
 pub mod control;

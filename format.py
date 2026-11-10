@@ -6,9 +6,9 @@
 #     "ruff",
 # ]
 # ///
-"""Format all of seltun's languages: Python (ruff), Markdown (markdownlint-cli2 --fix), and Rust (cargo fmt).
+"""Format all languages of seltun: Python (ruff), Markdown (markdownlint-cli2 --fix), and Rust (cargo fmt).
 
-Each step is skipped when its sources/tooling are absent.
+A step does not run if its sources or its tool are not available.
 """
 
 import os

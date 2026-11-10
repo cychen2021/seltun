@@ -1,67 +1,68 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file gives guidance to Claude Code (claude.ai/code) for work in this repository.
 
-It holds only what is worth knowing before any task in this repo. Everything worth knowing *when working on a particular part* lives in `docs/`, indexed by [docs/index.md](docs/index.md). Read the relevant page before changing that part; do not re-derive it.
+The file has only the information that applies to each task. The pages in `docs/` have the information for one part of the project. [docs/index.md](docs/index.md) lists them. Read the page for the part that you change. Do not find the information again.
 
-> **Private use only.** This project is for the owner's personal use. Do not push it to a public remote, publish it as a package, or otherwise distribute it.
+> **For the owner only.** Do not push this project to a public remote. Do not publish it as a package. Do not give it to other persons.
 
 ## Project purpose
 
-seltun is Clash Verge's TUN mode narrowed to chosen processes. Clash Verge's TUN (mihomo + Wintun) captures the whole system; seltun creates a Wintun adapter that only the **selected processes** are steered into, and forwards what arrives there to a destination — Clash Verge's mixed port — which proxies it. Everything else keeps using the normal network path.
+seltun is the TUN mode of Clash Verge for selected processes only. The TUN mode of Clash Verge (mihomo and Wintun) captures the whole system. seltun creates a Wintun adapter and steers only the **selected processes** into it. Then it forwards the flows to a destination. The destination is the mixed port of Clash Verge, which sends the flows through a proxy. All other traffic keeps its usual path.
 
-It is a CLI plus a daemon, like a sibling CLI project:
+seltun has a CLI and a daemon, as a sibling CLI project has:
 
-- `seltun` (Python, Typer): config, the persisted on/off switch (`state.json`), starting the daemon, autostart.
-- `seltund` (Rust, `native/daemon/`): the daemon. Creates the TUN adapter and routes while "on", decides each flow's process, forwards selected flows to Clash and the rest out the real interface. Controlled over a loopback JSON-lines port.
+- `seltun` (Python, Typer) has the config, the persistent on/off switch (`state.json`), the start of the daemon and autostart.
+- `seltund` (Rust, `native/daemon/`) is the daemon. When the switch is on, it creates the TUN adapter and the routes. It finds the process of each flow. It forwards the flows of the selected processes to Clash. It sends the other flows out through the physical interface. A loopback JSON-lines port controls the daemon.
 
-The daemon's executable name is deliberate: every connection it makes to Clash comes from the process `seltund.exe`, which is what Clash's `PROCESS-NAME` rules match. See [docs/daemon.md](docs/daemon.md) for the data path and why it is built this way (it follows Clash Verge's TUN, not a WinDivert redirect: Defender quarantines WinDivert).
+The name of the daemon executable is intentional. Each connection from the daemon to Clash comes from the process `seltund.exe`. A `PROCESS-NAME` rule of Clash matches this name. See [docs/daemon.md](docs/daemon.md) for the data path and the reasons for the design. The design follows the TUN mode of Clash Verge. It does not use a WinDivert redirect, because Defender puts WinDivert in quarantine.
 
-Windows only for now (Wintun, IP Helper, Task Scheduler); the pure Rust modules and the Python layer build and test anywhere.
+The project works on Windows only (Wintun, IP Helper, Task Scheduler). The pure Rust modules and the Python layer build and test on each system.
 
 ## Toolchain and commands
 
-This project uses **uv** (not pip/poetry) and targets **Python 3.14**; the daemon in `native/` is a Cargo workspace (edition 2024, toolchain pinned in `native/rust-toolchain.toml`). Validate with the project interpreter (`uv run python`, `uv run pytest`), not a system `python` — ruff formats to 3.14-only syntax such as PEP 758's unparenthesized `except A, B:`; do not "fix" it by adding parentheses.
+The project uses **uv** (not pip or poetry) and **Python 3.14**. The daemon in `native/` is a Cargo workspace (edition 2024). `native/rust-toolchain.toml` pins the toolchain. Use the project interpreter (`uv run python`, `uv run pytest`), not a system `python`. Ruff formats the code to syntax that only Python 3.14 supports, for example the PEP 758 form `except A, B:` without parentheses. Do not add parentheses.
 
-- Install / sync deps: `uv sync` (editable; does not build the daemon — `cargo build --release --manifest-path native/Cargo.toml` does, and `seltun` falls back to `native/target/release/`; `seltun init` fetches `wintun.dll` next to it)
-- Install as a tool: `uv tool install --force .` (the `hatch_build.py` hook compiles the daemon and downloads the pinned Wintun into `seltun/bin/`)
-- Run the CLI: `uv run seltun --help`
-- Tests: `uv run pytest`; `cargo test --manifest-path native/Cargo.toml`. Tests never create the adapter, elevated or not.
-- Format: `uv run format.py` (ruff, markdownlint-cli2, `cargo fmt`; each step skips when its tooling is absent).
-- Type-check: `uv run type_check.py` (`uvx pyright`, then `cargo clippy -D warnings`).
+- Install the dependencies: `uv sync`. This command installs the CLI in editable mode and does not build the daemon. `cargo build --release --manifest-path native/Cargo.toml` builds the daemon. `seltun` uses `native/target/release/` as a fallback. `seltun init` puts `wintun.dll` next to the daemon.
+- Install as a tool: `uv tool install --force .`. The `hatch_build.py` hook compiles the daemon. It also downloads the pinned Wintun into `seltun/bin/`.
+- Run the CLI: `uv run seltun --help`.
+- Run the tests: `uv run pytest` and `cargo test --manifest-path native/Cargo.toml`. The tests never create the adapter, also in an elevated terminal.
+- Format: `uv run format.py`. It runs ruff, markdownlint-cli2 and `cargo fmt`. A step does not run if its tool is not available.
+- Type-check: `uv run type_check.py`. It runs `uvx pyright` and then `cargo clippy -D warnings`.
 
-**After any significant code change, run both `format.py` and `type_check.py`** before handing back or committing — there is no CI, so these scripts are the authoritative gate.
+**After a large code change, run `format.py` and then `type_check.py`.** Do this before you commit. There is no CI. These scripts are the authoritative gate.
 
-Running the daemon for real needs an **elevated** terminal (Wintun adapter, routes): `seltun daemon run` in the foreground, or `seltun autostart enable` once (an elevated Task Scheduler task) and then `seltun daemon start` from any terminal.
+A real run of the daemon needs an **elevated** terminal, because of the Wintun adapter and the routes. Run `seltun daemon run` in the foreground. Or run `seltun autostart enable` one time. After this step, `seltun daemon start` works from each terminal.
 
 ## Repo layout
 
 ```text
-.vscode/                 # settings.json + commit-general.instructions.md
-docs/                    # per-topic reference (see docs/index.md)
+.vscode/                 # settings.json and commit-general.instructions.md
+docs/                    # one reference page for each topic (see docs/index.md)
 src/seltun/
-  config.py              # config.toml loader (mirrors native/daemon/src/config.rs)
-  state.py               # state.json: the persisted on/off switch
-  paths.py               # per-user config/data/log locations
-  control.py             # client of the daemon's control channel
-  daemon.py              # find and launch seltund
+  config.py              # config.toml loader (same rules as native/daemon/src/config.rs)
+  state.py               # state.json: the persistent on/off switch
+  paths.py               # per-user locations of config, data and log
+  control.py             # client of the control channel of the daemon
+  daemon.py              # finds and starts seltund
   autostart.py           # elevated Task Scheduler logon task
   drivers.py             # pinned download of wintun.dll
   cli/                   # Typer commands (thin layer)
-  support/               # console output (loguru), error types
-native/daemon/src/       # seltund (Rust): config, state, matcher, socks (Clash client), forward (data path), daemon (reconcile), control, platform (Windows glue)
+  support/               # console output (loguru) and error types
+native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of Clash), forward (data path), daemon (reconcile), control, platform (Windows code)
 tests/                   # pytest
-config.example.toml      # annotated config template; `seltun init` copies it (the wheel bundles it)
-hatch_build.py           # build hook: compile the daemon, fetch Wintun, bundle the template, into the wheel
-format.py / type_check.py
+config.example.toml      # template with comments; `seltun init` copies it (the wheel contains it)
+hatch_build.py           # build hook: compiles the daemon, downloads Wintun, adds the template to the wheel
+format.py, type_check.py
 ```
 
 ## Conventions
 
-- **Run the gate after significant changes**: `format.py` then `type_check.py`.
-- **Imports: at most two leading dots.** Use relative imports up to `..` only; anything that would need `...` uses the absolute path instead.
-- **Don't use hard line wraps** except in doc comments in source code or where explicitly required — one line per paragraph everywhere else, including EVERY markdown file, TOML comments, and commit-message bullets. `MD013` is switched off in `.markdownlint-cli2.jsonc` for this reason.
-- **Version lives in two places**: `version` in `pyproject.toml` (what `seltun --version` shows, via `src/seltun/_version.py`) and `[workspace.package].version` in `native/Cargo.toml` (what `seltund --version` shows). Bump both together.
-- **Config is read twice** (Python `config.py`, Rust `config.rs`) with the same defaults and the same strictness (unknown keys rejected); change both together.
-- **Commit messages** follow `.vscode/commit-general.instructions.md` (English; headline a capitalized verb < 10 words, no trailing period; blank line before the body; backtick `code_item` and `path/filename`; prefer "moved"/"renamed" over delete+add; avoid vague verbs like "refactor"/"improve" unless nothing fits; one line for minor changes).
-- **Docs live in `docs/`, named `snake_case.md`**, and every one is listed in [docs/index.md](docs/index.md). A new page means a new index row.
+- **Standard for text:** Write all documentation and all help and error messages in ASD-STE100 Simplified Technical English, Issue 9. The standard is in `C:\Users\cychen\OneDrive\Documents\ASD-STE100_ISSUE9.pdf`.
+- **Gate:** Run `format.py` and then `type_check.py` after a large change.
+- **Imports:** Use at most two leading dots. If an import needs three dots, use the absolute path.
+- **Line breaks:** Do not use hard line wraps, except in doc comments in source code or where a tool needs them. Write one line for each paragraph in each markdown file, each TOML comment and each commit-message bullet. `.markdownlint-cli2.jsonc` switches off `MD013` for this reason.
+- **Version:** The version is in two places. `version` in `pyproject.toml` is the value that `seltun --version` shows (`src/seltun/_version.py` reads it). `[workspace.package].version` in `native/Cargo.toml` is the value that `seltund --version` shows. Change both together.
+- **Config:** Python (`config.py`) and Rust (`config.rs`) both read the config. They use the same defaults and the same strict rules, and both reject unknown keys. Change both together.
+- **Commit messages:** Follow `.vscode/commit-general.instructions.md`. Write in English. Start the headline with a verb that has a capital letter. Use less than 10 words and no period at the end. Put a blank line before the body. Put backticks around `code_item` and `path/filename`. Use "moved" or "renamed" instead of delete and add. Do not use vague verbs such as "refactor" or "improve" if another verb is better. Use one line for a minor change.
+- **Docs:** Put docs in `docs/` and give them `snake_case.md` names. List each page in [docs/index.md](docs/index.md). A new page needs a new row.

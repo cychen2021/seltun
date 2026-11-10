@@ -1,6 +1,6 @@
-"""Fetching ``wintun.dll``, the one third-party binary the daemon needs next to ``seltund.exe``.
+"""Download of ``wintun.dll``. This is the only third-party binary that the daemon needs next to ``seltund.exe``.
 
-Wintun (https://www.wintun.net) is the TUN driver Clash Verge's TUN mode uses too. The release zip is pinned by SHA-256, so a changed download is refused. Stdlib only: the build hook (``hatch_build.py``) loads this file directly.
+Wintun (https://www.wintun.net) is the TUN driver that the TUN mode of Clash Verge also uses. A SHA-256 value pins the release zip. The code refuses a changed download. The module uses only the standard library, because the build hook (``hatch_build.py``) loads this file directly.
 """
 
 from __future__ import annotations
@@ -21,18 +21,18 @@ _ARCH = {"AMD64": "amd64", "x86_64": "amd64", "ARM64": "arm64", "x86": "x86"}
 
 
 def ensure_wintun(directory: Path, force: bool = False) -> Path:
-    """Put ``wintun.dll`` in ``directory`` (if it is not there yet) and return its path."""
+    """Put ``wintun.dll`` in ``directory`` if it is not there. Return its path."""
     target = directory / "wintun.dll"
     if target.is_file() and not force:
         return target
     arch = _ARCH.get(platform.machine())
     if arch is None:
-        raise RuntimeError(f"no Wintun build for {platform.machine()}")
+        raise RuntimeError(f"There is no Wintun build for {platform.machine()}.")
     with urllib.request.urlopen(WINTUN_URL, timeout=60) as response:
         data = response.read()
     if hashlib.sha256(data).hexdigest() != WINTUN_SHA256:
         raise RuntimeError(
-            f"{WINTUN_URL} does not match the pinned SHA-256; refusing it"
+            f"{WINTUN_URL} does not have the pinned SHA-256 value. The download is not accepted."
         )
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         dll = archive.read(f"wintun/bin/{arch}/wintun.dll")

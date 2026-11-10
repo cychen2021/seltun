@@ -1,6 +1,6 @@
-//! The control channel: one JSON request per line on a loopback TCP port, one JSON answer per line.
+//! The control channel. It uses a loopback TCP port. The client sends one JSON request in one line, and the daemon sends one JSON answer in one line.
 //!
-//! Requests carry no data, only a verb (`ping`, `status`, `reload`, `shutdown`); `reload` makes the daemon re-read the files the CLI wrote, so the channel cannot be used to hand an elevated process anything but "look at the user's own files again".
+//! A request has no data, only a verb: `ping`, `status`, `reload` or `shutdown`. The verb `reload` makes the daemon read the files that the CLI wrote again. Thus the channel gives the elevated daemon only one instruction: read the files of the user again.
 
 use std::sync::Arc;
 
@@ -39,7 +39,7 @@ async fn answer(line: &str, daemon: &Daemon, quit: &Notify) -> Response {
                 return Response {
                     ok: false,
                     status: None,
-                    error: Some(format!("unknown command {other:?}")),
+                    error: Some(format!("The command {other:?} is not known.")),
                 };
             },
         },
@@ -47,7 +47,7 @@ async fn answer(line: &str, daemon: &Daemon, quit: &Notify) -> Response {
             return Response {
                 ok: false,
                 status: None,
-                error: Some(format!("bad request: {error}")),
+                error: Some(format!("The request is not correct: {error}")),
             };
         },
     };
@@ -69,7 +69,7 @@ async fn serve_connection(stream: TcpStream, daemon: Arc<Daemon>, quit: Arc<Noti
     Ok(())
 }
 
-/// Serve the control channel on `listener` until the task is dropped.
+/// Serve the control channel on `listener`. The service stops when the task stops.
 pub async fn serve(listener: TcpListener, daemon: Arc<Daemon>, quit: Arc<Notify>) {
     loop {
         match listener.accept().await {
@@ -77,11 +77,11 @@ pub async fn serve(listener: TcpListener, daemon: Arc<Daemon>, quit: Arc<Notify>
                 let (daemon, quit) = (daemon.clone(), quit.clone());
                 tokio::spawn(async move {
                     if let Err(error) = serve_connection(stream, daemon, quit).await {
-                        tracing::debug!("control connection: {error}");
+                        tracing::debug!("Control connection failed: {error}");
                     }
                 });
             },
-            Err(error) => tracing::warn!("control accept: {error}"),
+            Err(error) => tracing::warn!("Control accept failed: {error}"),
         }
     }
 }

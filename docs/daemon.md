@@ -1,49 +1,92 @@
 # The daemon (`seltund`)
 
-## What Clash Verge's TUN does, and what seltun changes
+## The TUN mode of Clash Verge and the changes in seltun
 
-Clash Verge runs mihomo with a `tun:` section (this machine: `stack: gvisor`, `auto-route: true`, `auto-detect-interface: true`, `dns-hijack: any:53`). In that mode mihomo:
+Clash Verge runs mihomo with a `tun:` section. On the computer of the owner, the section has these values: `stack: gvisor`, `auto-route: true`, `auto-detect-interface: true` and `dns-hijack: any:53`. In this mode, mihomo does these steps:
 
-1. creates a **Wintun** adapter;
-2. **auto-routes**: adds half-default routes (`0.0.0.0/1`, `128.0.0.0/1`) onto the adapter, so every destination without a more specific route enters it;
-3. terminates the flows in a **userspace TCP/IP stack** (gVisor);
-4. matches each flow against the rules (`PROCESS-NAME` rules look up the process that owns the source socket), and sends it out the proxy or `DIRECT`;
-5. **auto-detects the interface**: its own outbound sockets are pinned to the real NIC, so they do not loop back into the adapter.
+1. It creates a **Wintun** adapter.
+2. It adds **auto-route** routes. These are the two half-default routes `0.0.0.0/1` and `128.0.0.0/1`. Each destination without a more specific route then enters the adapter.
+3. It ends the flows in a **userspace TCP/IP stack** (gVisor).
+4. It compares each flow with the rules. A `PROCESS-NAME` rule finds the process that owns the source socket.
+5. It sends the flow through a proxy or `DIRECT`.
+6. It pins its own outbound sockets to the physical network interface (**auto-detect-interface**). The sockets then do not go back into the adapter.
 
-seltun keeps that shape (Wintun, half-default routes, userspace stack, process lookup, pinned outbound sockets) and replaces the rule engine with one question: *is the owning process in `[processes].names`?* Yes → the flow is forwarded to Clash's mixed port (`[upstream]`), which proxies it. No → it goes out the real interface unchanged. The TUN adapter and routes exist only while seltun is **on**.
+seltun keeps this design: Wintun, half-default routes, a userspace stack, a process lookup and pinned outbound sockets. seltun replaces the rule engine with one question: is the owning process in `[processes].names`?
 
-An alternative considered first was WinDivert (steer only the selected processes' packets, leave everything else untouched). It was dropped because Windows Defender quarantines the WinDivert driver as potentially unwanted software, and weakening antivirus is not something this tool should ask for. The cost of the Wintun design: while on, all IPv4 TCP/UDP of the machine passes through the daemon (non-selected flows are just relayed to their destination).
+- If yes, seltun sends the flow to the mixed port of Clash (`[upstream]`). Clash then sends it through a proxy.
+- If no, the flow leaves through the physical interface without a change.
+
+The adapter and the routes are present only when seltun is on.
+
+The first design used WinDivert. WinDivert can steer the packets of the selected processes and does not touch other traffic. Windows Defender puts the WinDivert driver in quarantine as potentially unwanted software. Thus seltun does not use WinDivert. A weaker antivirus setting is not an option for this tool.
+
+The Wintun design has one disadvantage. When seltun is on, all IPv4 TCP and UDP traffic of the computer goes through the daemon. The daemon sends the flows of the other processes to their destinations without a change.
 
 ## Data path
 
-`native/daemon/src/forward.rs`. Windows routes a flow into the adapter, so its source address is the adapter's own (`[tun].address`). `ipstack` terminates it and yields a TCP stream or UDP datagram stream with the original source and destination.
+The code is in `native/daemon/src/forward.rs`.
 
-- **Owner lookup** (`platform/windows.rs`): `GetExtendedTcpTable` / `GetExtendedUdpTable` find the pid owning the source socket (TCP: matched on the full 4-tuple; UDP: on the local port), `QueryFullProcessImageNameW` gives its path, and `Matcher` compares it with the configured names or paths. An owner that cannot be found (system processes, a socket that already closed) counts as not selected.
-- **Selected, TCP**: a SOCKS5 `CONNECT` (or HTTP `CONNECT`) to `[upstream].address` for the destination IP. Clash only ever sees IPs: the process resolved the name itself, so domain rules in Clash do not apply to this traffic; use `PROCESS-NAME` and IP rules.
-- **Selected, UDP**: with `[upstream].udp = true`, a SOCKS5 `UDP ASSOCIATE`. Otherwise DNS (port 53) goes direct and everything else is dropped, so applications (QUIC, say) fall back to TCP.
-- **Not selected**: a socket pinned to the real interface with `IP_UNICAST_IF` connects to the destination. The real interface is the best default route that is not the adapter (`GetIpForwardTable2`), re-evaluated every two seconds so Wi-Fi/Ethernet changes are followed.
-- **ICMP echo** is answered locally (a real echo cannot be forwarded from userspace), as Clash's TUN does, so `ping` succeeds while on.
+Windows sends a flow into the adapter. The source address of the flow is then the address of the adapter (`[tun].address`). The library `ipstack` ends the flow. It gives a TCP stream or a UDP datagram stream with the original source and destination.
+
+**Owner lookup** (`platform/windows.rs`):
+
+- `GetExtendedTcpTable` and `GetExtendedUdpTable` give the pid of the process that owns the source socket. For TCP, the lookup uses the full 4-tuple. For UDP, it uses the local port.
+- `QueryFullProcessImageNameW` gives the path of the executable.
+- `Matcher` compares the path with the names or paths in the config file.
+- If the daemon does not find the owner of a flow, the flow counts as not selected. Examples are the flow of a system process and the flow of a closed socket.
+
+**Selected process, TCP:** The daemon sends a SOCKS5 `CONNECT` or an HTTP `CONNECT` to `[upstream].address` for the destination IP. Clash receives only IP addresses, because the process resolved the name before. Thus the domain rules of Clash do not apply to this traffic. Use `PROCESS-NAME` rules and IP rules.
+
+**Selected process, UDP:**
+
+- If `[upstream].udp` is `true`, the daemon uses a SOCKS5 `UDP ASSOCIATE`.
+- If `[upstream].udp` is `false`, DNS (port 53) goes direct. The daemon drops all other UDP. The application then changes to TCP. QUIC is an example.
+
+**Other processes:** A socket that the daemon pins to the physical interface with `IP_UNICAST_IF` connects to the destination. The physical interface has the default route with the lowest metric. It must be up and connected, and it is not the adapter. `GetIpForwardTable2` gives the routes. The daemon looks for the physical interface again after two seconds. Thus it follows a change between Wi-Fi and Ethernet.
+
+**ICMP echo:** The daemon sends the ping replies. A userspace program cannot forward an ICMP echo. The TUN mode of Clash does the same. Thus each ping gets a reply when seltun is on.
 
 ### What Clash sees
 
-Every connection to Clash is made by `seltund.exe`, so Clash identifies all forwarded traffic as the process `seltund.exe`. A `PROCESS-NAME,seltund.exe` rule in the Clash profile matches it; seltun does not manage Clash's configuration. Do not rename the binary casually: that name is part of how users write their Clash rules.
+The daemon makes each connection to Clash. Thus Clash identifies all forwarded traffic as the process `seltund.exe`. A rule `PROCESS-NAME,seltund.exe` in the Clash profile matches this traffic. seltun does not change the Clash configuration. The name `seltund.exe` is part of the rules that users write for Clash. Do not change the name.
 
-## Control channel and the persisted switch
+## Control channel and switch state
 
-The daemon runs whenever it is started (at login via autostart, or `seltun daemon start`) and is "on" or "off". The switch is `state.json` (`{"enabled": bool}` in the data directory); the CLI writes it atomically and then sends `reload` to `[daemon].control` (loopback, JSON lines: `{"cmd": "ping|status|reload|shutdown"}`). `reload` re-reads the state and the config and reconciles: on and not running → create the adapter and routes and start forwarding; off and running → tear them down; settings changed → restart. A broken config or state is reported and leaves what is running alone. At startup the daemon reconciles once, so it comes back in the state the user left. Requests carry no data, so the channel cannot be used to feed the (elevated) daemon anything but "look at the user's files again".
+The daemon runs after you start it. Start it at login with autostart, or with `seltun daemon start`. The daemon is on or off.
 
-The control port is also the single-instance guard: a second daemon fails to bind it. A changed `[daemon].control` needs a daemon restart.
+The switch state is in `state.json`. The file is in the data directory and has this form: `{"enabled": true}`. The CLI writes the file in one atomic step. Then the CLI sends `reload` to the address `[daemon].control`.
+
+The control channel is a loopback TCP port. It uses JSON lines, for example `{"cmd": "reload"}`. The commands are `ping`, `status`, `reload` and `shutdown`.
+
+The command `reload` makes the daemon read the state and the config file again. Then the daemon does one of these actions:
+
+- If the switch is on and the data path is not up, the daemon creates the adapter and the routes. Then it starts to forward the flows.
+- If the switch is off and the data path is up, the daemon removes the adapter and the routes.
+- If the settings changed, the daemon starts the data path again.
+
+If the config file or the state file has an error, the daemon reports the error. It does not change the data path that is up. At startup, the daemon does one `reload`. Thus it comes back in the state that you selected.
+
+A request has no data. Thus the control channel can give the elevated daemon only one instruction: read your files again.
+
+The control port also prevents a second daemon. A second daemon cannot bind the port. A new value of `[daemon].control` applies after the daemon starts again.
 
 ## Elevation and autostart
 
-Creating the adapter and its routes needs administrator rights. A Run-key entry cannot elevate silently, so autostart is a Task Scheduler **logon task** with the highest privileges (`autostart.py`): `seltun autostart enable` creates it once from an elevated terminal; afterwards `seltun daemon start` (runs the task) and login start the daemon elevated with no prompt. Without the task, `seltun daemon run` in an elevated terminal runs it in the foreground. An unelevated daemon still answers the control channel and reports why it cannot turn on.
+The creation of the adapter and the routes needs administrator rights. A Run-key entry cannot use these rights without a UAC prompt. Thus autostart is a Task Scheduler **logon task** with the highest privileges (`autostart.py`).
 
-`wintun.dll` must sit next to `seltund.exe` (`seltun init`, or the wheel build). It is fetched from wintun.net and pinned by SHA-256 in `drivers.py`.
+1. Open an elevated terminal. Run `seltun autostart enable` one time.
+2. After this step, `seltun daemon start` runs the task. The task also starts at each login. The daemon then runs with administrator rights, and no prompt shows.
 
-## Limitations
+Without the task, run `seltun daemon run` in an elevated terminal. The daemon then runs in the foreground.
 
-- IPv4 only: no IPv6 routes are added, so IPv6 traffic of selected processes is not steered.
-- Only new connections after the switch is turned on are steered; existing ones continue as they were.
-- Child processes are not followed; list them too.
-- Domain-based Clash rules do not see this traffic (IP only).
-- Do not run Clash Verge's own TUN at the same time: both add half-default routes.
+A daemon that is not elevated answers on the control channel. It reports the reason why it cannot turn on.
+
+`wintun.dll` must be in the same directory as `seltund.exe`. `seltun init` or the wheel build puts it there. The file comes from wintun.net. `drivers.py` has the SHA-256 value that the file must have.
+
+## Limits
+
+- seltun supports IPv4 only. It adds no IPv6 routes. Thus the IPv6 traffic of the selected processes does not go to Clash.
+- seltun steers only new connections. A connection that was open before you set the switch to on is not changed.
+- seltun does not follow child processes. Add them to the list.
+- The domain rules of Clash do not see this traffic. They see only the IP addresses.
+- Do not use the TUN mode of Clash Verge at the same time. Both add half-default routes.

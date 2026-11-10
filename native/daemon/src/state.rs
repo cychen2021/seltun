@@ -1,6 +1,6 @@
-//! `state.json`: the persisted on/off switch, shared with the Python CLI.
+//! `state.json`: the saved on/off switch. The Python CLI also uses this file.
 //!
-//! The CLI writes it (`seltun switch on` / `seltun switch off`) and tells the daemon to reload; the daemon only reads it, so a restart comes back in the state the user left.
+//! The CLI writes the file (`seltun switch on` and `seltun switch off`) and tells the daemon to reload. The daemon only reads the file. Thus the daemon comes back in the state that the user selected when it starts again.
 
 use std::path::Path;
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq)]
 pub struct State {
-    /// Whether the selected processes are steered into the TUN adapter. Off when there is no file.
+    /// If true, the daemon steers the selected processes into the TUN adapter. If the file is missing, the value is false.
     #[serde(default)]
     pub enabled: bool,
 }
@@ -17,11 +17,10 @@ pub struct State {
 impl State {
     pub fn load(path: &Path) -> Result<Self> {
         match std::fs::read_to_string(path) {
-            Ok(text) => {
-                serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
-            },
+            Ok(text) => serde_json::from_str(&text)
+                .with_context(|| format!("Cannot parse {}", path.display())),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(error).with_context(|| format!("reading {}", path.display())),
+            Err(error) => Err(error).with_context(|| format!("Cannot read {}", path.display())),
         }
     }
 }

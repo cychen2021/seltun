@@ -1,6 +1,6 @@
-//! The daemon's brain: reconcile what the user asked for (`state.json`, `config.toml`) with what is running.
+//! The control logic of the daemon. It makes what is running the same as what the user selected (`state.json` and `config.toml`).
 //!
-//! "On" means a TUN adapter, its routes and the forwarding task exist; "off" means none of that does, and the daemon only answers the control channel. [`Daemon::reload`] is the one entry point: the CLI writes the state file and calls it, and startup calls it once to come back in the persisted state.
+//! "On" means that a TUN adapter, its routes, and the forwarding task are present. "Off" means that they are not present, and the daemon only answers on the control channel. [`Daemon::reload`] is the only entry point. The CLI writes the state file and then calls it. The startup also calls it one time, to get the saved state.
 
 use std::sync::{Arc, Mutex};
 
@@ -12,15 +12,15 @@ use tokio::task::JoinHandle;
 use crate::config::{Cli, Settings};
 use crate::state::State;
 
-/// What `seltun status` shows.
+/// The information that `seltun status` shows.
 #[derive(Serialize, Debug, Clone)]
 pub struct Status {
     pub pid: u32,
-    /// What the user asked for (the persisted switch).
+    /// The state that the user selected (the saved switch).
     pub enabled: bool,
-    /// Whether the TUN adapter and forwarding are up right now.
+    /// True if the TUN adapter and the forwarding are up.
     pub active: bool,
-    /// Why the daemon is not in the state asked for, if it is not.
+    /// The reason why the daemon is not in the selected state, if it is not.
     pub error: Option<String>,
     pub processes: Vec<String>,
     pub upstream: String,
@@ -31,7 +31,7 @@ struct Active {
     settings: Settings,
     stop: watch::Sender<bool>,
     task: JoinHandle<()>,
-    /// Set by the task if the data path dies on its own.
+    /// The task sets this value if the data path stops with an error.
     failure: Arc<Mutex<Option<String>>>,
 }
 
@@ -67,7 +67,7 @@ impl Daemon {
         }
     }
 
-    /// Re-read the state and the config and make reality match; the outcome is in the returned status.
+    /// Read the state and the config again, and make the daemon match them. The returned status shows the result.
     pub async fn reload(&self) -> Status {
         let mut inner = self.inner.lock().await;
         inner.error = None;
@@ -96,7 +96,7 @@ impl Daemon {
         Self::snapshot(&mut *self.inner.lock().await)
     }
 
-    /// Tear the data path down (the daemon is exiting).
+    /// Remove the data path. The daemon stops.
     pub async fn stop(&self) {
         if let Some(active) = self.inner.lock().await.active.take() {
             active.stop().await;
@@ -109,17 +109,19 @@ impl Daemon {
         {
             let active = inner.active.take().expect("checked above");
             if let Some(error) = active.failure.lock().ok().and_then(|mut f| f.take()) {
-                tracing::warn!("the previous data path had failed: {error}");
+                tracing::warn!("The previous data path failed: {error}");
             }
             active.stop().await;
-            tracing::info!("steering stopped");
+            tracing::info!("Steering stopped.");
         }
         if enabled && inner.active.is_none() {
             if settings.processes.is_empty() {
-                bail!("on, but [processes].names is empty: nothing to steer");
+                bail!(
+                    "The switch is on, but [processes].names is empty. There is no process to steer."
+                );
             }
             inner.active = Some(start(settings).await?);
-            tracing::info!("steering started");
+            tracing::info!("Steering started.");
         }
         Ok(())
     }
@@ -158,18 +160,18 @@ async fn start(settings: Settings) -> Result<Active> {
     use crate::matcher::Matcher;
     use crate::platform::{Routes, is_elevated};
 
-    /// A fixed adapter GUID, so Windows keeps one network profile for it instead of a new one per start.
+    /// A fixed adapter GUID. Windows then keeps one network profile for the adapter. Without it, Windows makes a new profile at each start.
     const ADAPTER_GUID: u128 = 0x5e17_0a11_c0de_4f1d_9a3b_2c64_7e01_5e17;
 
     if !is_elevated() {
         bail!(
-            "creating the TUN adapter needs an elevated process; run `seltun autostart enable` from an elevated terminal once, then `seltun daemon start`"
+            "To create the TUN adapter, the daemon must run with administrator rights. Run `seltun autostart enable` one time in an elevated terminal. Then run `seltun daemon start`."
         );
     }
     let wintun = std::env::current_exe()?.with_file_name("wintun.dll");
     if !wintun.is_file() {
         bail!(
-            "{} is missing; run `seltun init` to download it",
+            "{} is missing. Run `seltun init` to download it.",
             wintun.display()
         );
     }
@@ -185,9 +187,11 @@ async fn start(settings: Settings) -> Result<Active> {
         platform.device_guid(ADAPTER_GUID);
         platform.wintun_file(wintun.as_os_str());
     });
-    let device = tun::create_as_async(&config).context("creating the Wintun adapter")?;
-    let index = device.tun_index().context("reading the adapter index")? as u32;
-    let routes = Routes::install(index).context("adding the TUN routes")?;
+    let device = tun::create_as_async(&config).context("Cannot create the Wintun adapter")?;
+    let index = device
+        .tun_index()
+        .context("Cannot read the adapter index")? as u32;
+    let routes = Routes::install(index).context("Cannot add the TUN routes")?;
 
     let ctx = Arc::new(Context::new(
         settings.upstream.clone(),
@@ -200,7 +204,7 @@ async fn start(settings: Settings) -> Result<Active> {
     let mtu = settings.tun.mtu;
     let task = tokio::spawn(async move {
         if let Err(error) = forward::run(device, ctx, mtu, stopped).await {
-            tracing::error!("data path failed: {error:#}");
+            tracing::error!("The data path failed: {error:#}");
             *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
         }
         // The adapter is gone with the stack; the routes go with it, explicitly too.
@@ -216,7 +220,7 @@ async fn start(settings: Settings) -> Result<Active> {
 
 #[cfg(not(windows))]
 async fn start(_settings: Settings) -> Result<Active> {
-    bail!("seltund steers traffic on Windows only")
+    bail!("seltund works on Windows only.")
 }
 
 #[cfg(test)]

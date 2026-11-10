@@ -1,9 +1,9 @@
 # Documentation
 
-Reference for the parts of seltun whose *why* is not recoverable from the code. [CLAUDE.md](../CLAUDE.md) keeps only what applies to every task; read the page for the part you are changing before changing it.
+These pages explain the parts of seltun where the reason is not clear from the code. [CLAUDE.md](../CLAUDE.md) has only the information that applies to each task. Read the page for the part that you change before you change it.
 
-File names are `snake_case.md`, and every page is listed here — a new page means a new row.
+File names are in `snake_case.md`. Each page is in this index. Add a row for each new page.
 
-| Page | What it covers |
+| Page | Contents |
 | --- | --- |
-| [daemon.md](daemon.md) | `seltund`: how Clash Verge's TUN works and how seltun narrows it to chosen processes, the data path, the control channel and the persisted switch, elevation and autostart, limitations |
+| [daemon.md](daemon.md) | `seltund`: the TUN mode of Clash Verge and the changes in seltun, the data path, the control channel, the switch state, elevation, autostart and limits |

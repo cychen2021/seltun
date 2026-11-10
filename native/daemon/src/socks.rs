@@ -1,6 +1,6 @@
-//! The client side of Clash's mixed port: SOCKS5 (`CONNECT`, `UDP ASSOCIATE`) and HTTP `CONNECT`.
+//! The client of the mixed port of Clash: SOCKS5 (`CONNECT` and `UDP ASSOCIATE`) and HTTP `CONNECT`.
 //!
-//! Every connection the daemon opens to the upstream is made from this process, which is why Clash (matching on the connecting process) sees all forwarded traffic as `seltund.exe`. Targets are always IP addresses: the TUN only ever sees what the process already resolved.
+//! The daemon makes each connection to the upstream from its own process. Thus Clash (which matches the connecting process) sees all forwarded traffic as traffic of `seltund.exe`. A target is always an IP address, because the TUN sees only what the process already resolved.
 
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -14,7 +14,7 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorKind::InvalidData, message.into())
 }
 
-/// `ATYP | addr | port`, the address form SOCKS5 uses in requests, replies and UDP headers.
+/// `ATYP | addr | port`. This is the address form that SOCKS5 uses in requests, replies, and UDP headers.
 fn encode_addr(out: &mut Vec<u8>, addr: SocketAddr) {
     match addr.ip() {
         IpAddr::V4(ip) => {
@@ -29,7 +29,7 @@ fn encode_addr(out: &mut Vec<u8>, addr: SocketAddr) {
     out.extend_from_slice(&addr.port().to_be_bytes());
 }
 
-/// Parse `ATYP | addr | port` from the front of `data`; returns the address and the bytes used. A domain is rejected, as the daemon only ever asks for IPs and a relay answers with one.
+/// Parse `ATYP | addr | port` from the start of `data`. Return the address and the number of bytes that the function used. The function rejects a domain. The daemon asks only for IP addresses, and a relay answers with an IP address.
 fn decode_addr(data: &[u8]) -> Result<(SocketAddr, usize)> {
     let short = || invalid("truncated SOCKS5 address");
     let (ip, used): (IpAddr, usize) = match *data.first().ok_or_else(short)? {
@@ -41,7 +41,11 @@ fn decode_addr(data: &[u8]) -> Result<(SocketAddr, usize)> {
             let octets: [u8; 16] = data.get(1..17).ok_or_else(short)?.try_into().unwrap();
             (Ipv6Addr::from(octets).into(), 17)
         },
-        other => return Err(invalid(format!("unsupported SOCKS5 address type {other}"))),
+        other => {
+            return Err(invalid(format!(
+                "The SOCKS5 address type {other} is not supported."
+            )));
+        },
     };
     let port = data.get(used..used + 2).ok_or_else(short)?;
     Ok((
@@ -55,12 +59,15 @@ async fn read_reply(stream: &mut TcpStream) -> Result<SocketAddr> {
     let mut head = [0u8; 4];
     stream.read_exact(&mut head).await?;
     if head[0] != 5 {
-        return Err(invalid("not a SOCKS5 reply"));
+        return Err(invalid("The reply is not a SOCKS5 reply."));
     }
     if head[1] != 0 {
         return Err(Error::new(
             ErrorKind::ConnectionRefused,
-            format!("the upstream refused (SOCKS5 reply {})", head[1]),
+            format!(
+                "The upstream refused the request (SOCKS5 reply {}).",
+                head[1]
+            ),
         ));
     }
     let rest = match head[3] {
@@ -80,7 +87,7 @@ async fn socks5_handshake(stream: &mut TcpStream) -> Result<()> {
     stream.read_exact(&mut answer).await?;
     if answer != [5, 0] {
         return Err(invalid(
-            "the upstream does not accept SOCKS5 without authentication",
+            "The upstream does not accept SOCKS5 without authentication.",
         ));
     }
     Ok(())
@@ -105,7 +112,7 @@ async fn http_connect(stream: &mut TcpStream, target: SocketAddr) -> Result<()> 
     let mut head = Vec::new();
     while !head.ends_with(b"\r\n\r\n") {
         if head.len() > 8192 {
-            return Err(invalid("the upstream's CONNECT answer is too long"));
+            return Err(invalid("The CONNECT answer of the upstream is too long."));
         }
         head.push(stream.read_u8().await?);
     }
@@ -114,7 +121,7 @@ async fn http_connect(stream: &mut TcpStream, target: SocketAddr) -> Result<()> 
     if line.split_whitespace().nth(1) != Some("200") {
         return Err(Error::new(
             ErrorKind::ConnectionRefused,
-            format!("the upstream refused: {line}"),
+            format!("The upstream refused the request: {line}"),
         ));
     }
     Ok(())
@@ -133,7 +140,7 @@ pub async fn connect(upstream: &Upstream, target: SocketAddr) -> Result<TcpStrea
     Ok(stream)
 }
 
-/// A SOCKS5 UDP association: datagrams to any target go through the upstream's UDP relay until this is dropped (which closes the control connection that keeps the association alive).
+/// A SOCKS5 UDP association. Datagrams to each target go through the UDP relay of the upstream until the code drops this value. The drop closes the control connection that keeps the association open.
 pub struct UdpAssociation {
     _control: TcpStream,
     socket: UdpSocket,
@@ -163,14 +170,14 @@ impl UdpAssociation {
         Ok(())
     }
 
-    /// The next datagram, as its source and payload (copied to the front of `buf`).
+    /// The next datagram, with its source and its payload. The function copies the payload to the start of `buf`.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<(SocketAddr, usize)> {
         let mut raw = vec![0u8; buf.len() + 22];
         let n = self.socket.recv(&mut raw).await?;
         let raw = &raw[..n];
         if raw.len() < 3 || raw[2] != 0 {
             return Err(invalid(
-                "fragmented or truncated UDP datagram from the upstream",
+                "The UDP datagram from the upstream is fragmented or too short.",
             ));
         }
         let (source, used) = decode_addr(&raw[3..])?;

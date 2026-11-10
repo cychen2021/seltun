@@ -1,6 +1,6 @@
 """The ``seltun`` command-line interface (Typer).
 
-This is the thin command layer: it loads config and state, writes the on/off state, and talks to the daemon (:mod:`seltun.control`, :mod:`seltun.daemon`, :mod:`seltun.autostart`).
+This layer is thin. It loads the config and the state, writes the switch state, and sends commands to the daemon (:mod:`seltun.control`, :mod:`seltun.daemon`, :mod:`seltun.autostart`).
 """
 
 from __future__ import annotations
@@ -37,17 +37,17 @@ from ._errors import handle_errors
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 autostart_app = typer.Typer(
     no_args_is_help=True,
-    help="Start the daemon at login (an elevated Task Scheduler task).",
+    help="Start the daemon at login with an elevated Task Scheduler task.",
 )
 app.add_typer(autostart_app, name="autostart")
 switch_app = typer.Typer(
     no_args_is_help=True,
-    help="Turn steering on or off (persisted across restarts).",
+    help="Set the switch to on or off. The switch keeps its state after a restart.",
 )
 app.add_typer(switch_app, name="switch")
 daemon_app = typer.Typer(
     no_args_is_help=True,
-    help="Run, start or stop the daemon.",
+    help="Run, start, or stop the daemon.",
 )
 app.add_typer(daemon_app, name="daemon")
 
@@ -75,22 +75,22 @@ def _root(
     config: Path | None = typer.Option(
         None,
         "--config",
-        help=f"Behavior config (TOML). Default: {paths.config_file()}",
+        help=f"Config file (TOML). Default: {paths.config_file()}",
         show_default=False,
     ),
     state: Path | None = typer.Option(
         None,
         "--state",
-        help=f"On/off state file. Default: {paths.state_file()}",
+        help=f"Switch state file. Default: {paths.state_file()}",
         show_default=False,
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Log debug detail."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show debug messages."),
     _version: bool = typer.Option(
         False,
         "--version",
         callback=_show_version,
         is_eager=True,
-        help="Show the version and exit.",
+        help="Show the version and stop.",
     ),
 ) -> None:
     """Steer selected processes into a TUN adapter and forward them to Clash."""
@@ -106,33 +106,33 @@ def _root(
 
 @app.command()
 def init(ctx: typer.Context) -> None:
-    """Create the config from the example if it is missing, and download wintun.dll (the TUN driver Clash Verge uses too) next to the daemon if it is missing. Safe to run again."""
+    """Create the config file if it is missing. Download wintun.dll next to the daemon if it is missing. You can run this command again with no risk."""
     c: Context = ctx.obj
     with handle_errors():
         if c.config_path.exists():
-            print_info(f"{c.config_path} already exists; left as it is")
+            print_info(f"{c.config_path} is already there. No change.")
         else:
             c.config_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(EXAMPLE_CONFIG, c.config_path)
-            print_success(f"Wrote {c.config_path}")
+            print_success(f"Created {c.config_path}")
             print_info(
-                "List the processes to steer under [processes].names, then `seltun switch on`"
+                "In [processes].names, write the processes to steer. Then run `seltun switch on`."
             )
         target = daemon_.find_binary().parent
         if (target / "wintun.dll").is_file():
-            print_info(f"{target / 'wintun.dll'} already exists; left as it is")
+            print_info(f"{target / 'wintun.dll'} is already there. No change.")
         else:
-            print_step(f"Fetching Wintun into {target}")
+            print_step(f"Download Wintun to {target}")
             try:
                 dll = ensure_wintun(target)
             except (OSError, RuntimeError) as exc:
-                raise SeltunError(f"fetching Wintun: {exc}") from exc
-            print_success(f"Wrote {dll}")
+                raise SeltunError(f"Download of Wintun failed: {exc}") from exc
+            print_success(f"Created {dll}")
 
 
 @app.command("paths")
 def show_paths(ctx: typer.Context) -> None:
-    """Show where the config, the on/off state and the daemon log live."""
+    """Show the locations of the config file, the switch state, and the daemon log."""
     c: Context = ctx.obj
     for label, path in (
         ("config", c.config_path),
@@ -147,49 +147,49 @@ def _save_state(c: Context, enabled: bool) -> None:
 
 
 def _summary(status: dict[str, Any]) -> str:
-    """One line on what the daemon is doing relative to what was asked."""
+    """One line about the state of the daemon."""
     if status["active"]:
-        return f"on: steering {', '.join(status['processes'])} to Clash at {status['upstream']}"
-    return "on, but not steering" if status["enabled"] else "off"
+        return f"on. The daemon steers {', '.join(status['processes'])} to Clash at {status['upstream']}"
+    return "on, but the daemon does not steer" if status["enabled"] else "off"
 
 
 def _apply(c: Context, enabled: bool) -> None:
-    """Persist the switch, then make a running daemon follow it; a daemon that is not running picks the state up when it starts."""
+    """Save the switch. Then make the daemon follow it. A daemon that is not running reads the state when it starts."""
     with handle_errors():
         _save_state(c, enabled)
         if enabled and not c.config.processes.names:
             print_warning(
-                f"[processes].names is empty in {c.config_path}: nothing would be steered"
+                f"[processes].names is empty in {c.config_path}. seltun has no process to steer."
             )
         try:
             status = request(c.control, "reload")
         except DaemonNotRunning:
             print_info(
-                f"Saved: seltun is {'on' if enabled else 'off'}. The daemon is not running; the switch applies when it starts (`seltun daemon start`)"
+                f"Saved: seltun is {'on' if enabled else 'off'}. The daemon is not running. The switch applies when the daemon starts (`seltun daemon start`)."
             )
             return
         if status["error"]:
             raise SeltunError(
-                f"{status['error']} (the switch stays {'on' if enabled else 'off'}; fix it, then `seltun reload`)"
+                f"{status['error']} The switch stays {'on' if enabled else 'off'}. Correct the problem, then run `seltun reload`."
             )
     print_success(f"seltun is {_summary(status)}")
 
 
 @switch_app.command("on")
 def switch_on(ctx: typer.Context) -> None:
-    """Turn steering on; it stays on across restarts of the daemon and the machine."""
+    """Set the switch to on. It stays on when the daemon or the computer starts again."""
     _apply(ctx.obj, True)
 
 
 @switch_app.command("off")
 def switch_off(ctx: typer.Context) -> None:
-    """Turn steering off (the TUN adapter goes away); it stays off across restarts."""
+    """Set the switch to off. The daemon removes the TUN adapter. The switch stays off when the daemon or the computer starts again."""
     _apply(ctx.obj, False)
 
 
 @app.command()
 def reload(ctx: typer.Context) -> None:
-    """Make the daemon re-read the config and the on/off state."""
+    """Make the daemon read the config file and the switch state again."""
     c: Context = ctx.obj
     with handle_errors():
         status = request(c.control, "reload")
@@ -201,9 +201,9 @@ def reload(ctx: typer.Context) -> None:
 @app.command()
 def status(
     ctx: typer.Context,
-    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+    as_json: bool = typer.Option(False, "--json", help="Show machine-readable output."),
 ) -> None:
-    """Show the persisted switch and what the daemon is doing."""
+    """Show the saved switch and the state of the daemon."""
     c: Context = ctx.obj
     with handle_errors():
         persisted = State.load(c.state_path)
@@ -215,7 +215,7 @@ def status(
         typer.echo(json.dumps({"state": asdict(persisted), "daemon": daemon}, indent=2))
         return
     typer.echo(
-        f"switch   {'on' if persisted.enabled else 'off'} (persisted in {c.state_path})"
+        f"switch   {'on' if persisted.enabled else 'off'} (saved in {c.state_path})"
     )
     if daemon is None:
         typer.echo("daemon   not running (`seltun daemon start`)")
@@ -233,7 +233,7 @@ def status(
 
 @daemon_app.command("start")
 def daemon_start(ctx: typer.Context) -> None:
-    """Start the daemon (through its startup task if there is one, which runs it elevated)."""
+    """Start the daemon. If the startup task is installed, the task starts the daemon with administrator rights."""
     c: Context = ctx.obj
     with handle_errors():
         try:
@@ -253,25 +253,25 @@ def daemon_start(ctx: typer.Context) -> None:
                 except DaemonNotRunning:
                     if time.monotonic() > deadline:
                         raise SeltunError(
-                            f"the startup task ran but the daemon does not answer; see {paths.daemon_log()}"
+                            f"The startup task ran, but the daemon does not answer. See {paths.daemon_log()}."
                         ) from None
                     time.sleep(0.3)
             print_success(
-                f"The daemon started through its startup task; seltun is {_summary(status)}"
+                f"The startup task started the daemon. seltun is {_summary(status)}"
             )
             return
         argv = daemon_.command(c.config_path, c.state_path, paths.daemon_log())
         pid = daemon_.start_background(argv, c.control, paths.daemon_log())
         if not autostart_.is_admin():
             print_warning(
-                "This terminal is not elevated, so the daemon cannot create the TUN adapter; run `seltun autostart enable` from an elevated terminal once, and `seltun daemon start` will run it elevated from then on"
+                "This terminal is not elevated. The daemon cannot create the TUN adapter. Run `seltun autostart enable` one time in an elevated terminal. After that, `seltun daemon start` starts the daemon with administrator rights."
             )
-    print_success(f"The daemon (pid {pid}) is running; it logs to {paths.daemon_log()}")
+    print_success(f"The daemon (pid {pid}) runs. The log is {paths.daemon_log()}")
 
 
 @daemon_app.command("stop")
 def daemon_stop(ctx: typer.Context) -> None:
-    """Stop the daemon (the persisted switch is left as it is)."""
+    """Stop the daemon. The switch keeps its state."""
     c: Context = ctx.obj
     with handle_errors():
         try:
@@ -279,12 +279,12 @@ def daemon_stop(ctx: typer.Context) -> None:
         except DaemonNotRunning:
             print_info("The daemon was not running")
             return
-    print_success("The daemon is stopping")
+    print_success("The daemon stops.")
 
 
 @daemon_app.command("run")
 def daemon_run(ctx: typer.Context) -> None:
-    """Run the daemon in the foreground until Ctrl+C (needs an elevated terminal to turn on)."""
+    """Run the daemon in the foreground until you press Ctrl+C. To turn on, use an elevated terminal."""
     c: Context = ctx.obj
     with handle_errors():
         argv = daemon_.command(c.config_path, c.state_path, None)
@@ -293,30 +293,30 @@ def daemon_run(ctx: typer.Context) -> None:
 
 @autostart_app.command("enable")
 def autostart_enable(ctx: typer.Context) -> None:
-    """Start the daemon at every login, elevated (run once from an elevated terminal)."""
+    """Start the daemon at each login with administrator rights. Run this command one time in an elevated terminal."""
     c: Context = ctx.obj
     with handle_errors():
         line = autostart_.enable(
             daemon_.command(c.config_path, c.state_path, paths.daemon_log())
         )
     print_success(f"The daemon starts at login: {line}")
-    print_info("To start it now, run `seltun daemon start`")
+    print_info("To start the daemon, run `seltun daemon start`.")
 
 
 @autostart_app.command("disable")
 def autostart_disable() -> None:
-    """Stop starting the daemon at login (a running daemon keeps running)."""
+    """Do not start the daemon at login. A daemon that runs does not stop."""
     with handle_errors():
         removed = autostart_.disable()
     if removed:
-        print_success("The daemon no longer starts at login")
+        print_success("The daemon does not start at login.")
     else:
-        print_info("The daemon was not set to start at login")
+        print_info("The startup task was not installed.")
 
 
 @autostart_app.command("status")
 def autostart_status() -> None:
-    """Show whether the daemon starts at login, and with what command."""
+    """Show if the daemon starts at login and the command that it uses."""
     with handle_errors():
         line = autostart_.registered()
     typer.echo(_autostart_summary(line))

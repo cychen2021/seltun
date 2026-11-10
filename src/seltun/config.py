@@ -1,6 +1,6 @@
-"""Behavior config, read from ``config.toml`` in the per-user config directory (see :mod:`seltun.paths`); ``seltun init`` writes it from the packaged ``config.example.toml``.
+"""Config file. seltun reads ``config.toml`` from the config directory of the user (see :mod:`seltun.paths`). ``seltun init`` creates it from ``config.example.toml``.
 
-Every key is optional; a missing file or table means the defaults below. A bare top-level key, or an unknown key in a table, is rejected so a typo cannot silently fall back to a default. The daemon reads the same file (``native/daemon/src/config.rs``) and applies the same defaults.
+All keys are optional. If the file or a table is missing, seltun uses the defaults below. seltun rejects a key at the top level and an unknown key in a table. Thus a typo cannot select a default without a warning. The daemon reads the same file (``native/daemon/src/config.rs``) and uses the same defaults.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ __all__ = [
     "UpstreamConfig",
 ]
 
-#: The template ``seltun init`` copies. It lives at the repo root; the wheel build (``hatch_build.py``) copies it into the package, so an installed seltun finds it beside this file and a checkout finds it at the root.
+#: The template that ``seltun init`` copies. The template is in the root of the repository. The wheel build (``hatch_build.py``) copies it into the package. Thus an installed seltun finds it next to this file, and a checkout finds it in the root.
 _PACKAGED = Path(__file__).with_name("config.example.toml")
 EXAMPLE_CONFIG = (
     _PACKAGED
@@ -34,7 +34,9 @@ EXAMPLE_CONFIG = (
 def _host_port(what: str, text: str) -> tuple[str, int]:
     host, sep, port = text.rpartition(":")
     if not sep or not port.isdigit():
-        raise SeltunError(f"{what} must be host:port, got {text!r}")
+        raise SeltunError(
+            f"{what} must have the form host:port. The value is {text!r}."
+        )
     return host.strip("[]"), int(port)
 
 
@@ -54,10 +56,10 @@ class UpstreamConfig:
         _host_port("[upstream].address", self.address)
         if self.protocol not in ("socks5", "http"):
             raise SeltunError(
-                f'[upstream].protocol must be "socks5" or "http", got {self.protocol!r}'
+                f'[upstream].protocol must be "socks5" or "http". The value is {self.protocol!r}.'
             )
         if self.udp and self.protocol != "socks5":
-            raise SeltunError('[upstream].udp needs protocol = "socks5"')
+            raise SeltunError('[upstream].udp = true needs protocol = "socks5".')
 
 
 @dataclass
@@ -71,15 +73,17 @@ class TunConfig:
             ip = IPv4Address(self.address)
         except ValueError:
             raise SeltunError(
-                f"[tun].address must be an IPv4 address, got {self.address!r}"
+                f"[tun].address must be an IPv4 address. The value is {self.address!r}."
             ) from None
         if ip.is_loopback or ip.is_unspecified:
-            raise SeltunError("[tun].address must not be loopback or unspecified")
+            raise SeltunError(
+                "[tun].address must not be a loopback address or an unspecified address."
+            )
 
 
 @dataclass
 class DaemonConfig:
-    """Where the CLI reaches the daemon (and where the daemon binds)."""
+    """The address that the CLI uses to reach the daemon. The daemon binds the same address."""
 
     control: str = "127.0.0.1:7898"
 
@@ -106,7 +110,7 @@ class Config:
         config = cls()
         for key, value in raw.items():
             if not isinstance(value, dict) or key not in {f.name for f in fields(cls)}:
-                raise SeltunError(f"{path}: unknown key or table {key!r}")
+                raise SeltunError(f"{path}: the key or table {key!r} is not known.")
             setattr(config, key, _table(getattr(config, key), key, value, path))
         config.upstream.validate()
         config.tun.validate()
@@ -115,12 +119,12 @@ class Config:
 
 
 def _table(default: Any, name: str, raw: dict[str, Any], path: Path) -> Any:
-    """Fill the dataclass ``default`` from a TOML table; kebab-case keys map to snake_case fields."""
+    """Fill the dataclass ``default`` from a TOML table. A key in kebab-case maps to a field in snake_case."""
     known = {f.name for f in fields(default)}
     values: dict[str, Any] = {}
     for key, value in raw.items():
         attr = key.replace("-", "_")
         if attr not in known:
-            raise SeltunError(f"{path}: unknown key {key!r} in [{name}]")
+            raise SeltunError(f"{path}: the key {key!r} in [{name}] is not known.")
         values[attr] = value
     return type(default)(**values)

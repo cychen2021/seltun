@@ -1,6 +1,6 @@
-"""Where seltun keeps its files: the platform's per-user locations, not the working directory.
+"""The locations of the seltun files. They are the per-user locations of the platform, not the working directory.
 
-On Windows, config is in ``%APPDATA%/seltun`` (roaming, like other user settings) and data -- the on/off state, the daemon's log -- in ``%LOCALAPPDATA%/seltun``. ``--config`` and ``--state`` override the first two.
+On Windows, the config file is in ``%APPDATA%/seltun`` (roaming, as for other user settings). The data are in ``%LOCALAPPDATA%/seltun``: the switch state and the log of the daemon. The options ``--config`` and ``--state`` change the first two locations.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def config_file() -> Path:
 
 
 def state_file() -> Path:
-    """The persisted on/off switch (``{"enabled": bool}``)."""
+    """The saved switch state (``{"enabled": bool}``)."""
     return platformdirs.user_data_path(APP, appauthor=False) / "state.json"
 
 
@@ -31,5 +31,5 @@ def log_dir() -> Path:
 
 
 def daemon_log() -> Path:
-    """Where the daemon logs when it runs without a console (autostart, ``seltun daemon start``)."""
+    """The log of the daemon. The daemon writes to it when it runs without a console (autostart, ``seltun daemon start``)."""
     return log_dir() / "seltund.log"

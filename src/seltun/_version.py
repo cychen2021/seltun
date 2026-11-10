@@ -1,4 +1,4 @@
-"""The installed version, from ``pyproject.toml``; the daemon (``seltund --version``) is built from the same workspace version."""
+"""The installed version. It comes from ``pyproject.toml``. The daemon (``seltund --version``) uses the version of the Cargo workspace. Change both together."""
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -6,9 +6,9 @@
 #     "pyright",
 # ]
 # ///
-"""Type-check the Python sources with pyright, and lint the Rust workspace with clippy.
+"""Type-check the Python sources with pyright. Lint the Rust workspace with clippy.
 
-Discovers `src/`, `tests/`, top-level `*.py`, and `scripts/`; clippy runs over `native/` with warnings denied.
+The script finds `src/`, `tests/`, the `*.py` files in the top directory, and `scripts/`. Clippy runs on `native/` and treats warnings as errors.
 """
 
 import os

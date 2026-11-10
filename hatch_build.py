@@ -1,6 +1,8 @@
-"""Hatch build hook: compile ``seltund`` and ship it, with ``wintun.dll``, inside the wheel.
+"""Hatch build hook. It compiles ``seltund`` and puts it in the wheel with ``wintun.dll``.
 
-The daemon is a Rust binary (``native/daemon/``). A regular wheel build runs ``cargo build --release`` and places the binary and the pinned Wintun driver DLL (plus `config.example.toml`) at ``seltun/bin/``, where ``seltun`` looks first; the wheel is tagged for this platform. An editable install (``uv sync``) skips all of that: ``seltun`` then falls back to ``native/target/release/``, which ``cargo build --release`` keeps current, and ``seltun setup`` fetches the DLL next to it.
+The daemon is a Rust binary (``native/daemon/``). A regular wheel build runs ``cargo build --release``. It puts the binary, the pinned Wintun driver DLL, and ``config.example.toml`` in the package. ``seltun`` looks for the binary and the DLL in ``seltun/bin/`` first. The wheel has a tag for this platform.
+
+An editable install (``uv sync``) does none of this. ``seltun`` then uses ``native/target/release/``, which ``cargo build --release`` keeps current. ``seltun init`` downloads the DLL next to the binary.
 """
 
 from __future__ import annotations

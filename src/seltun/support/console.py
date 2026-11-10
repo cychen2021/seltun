@@ -1,6 +1,6 @@
-"""User-facing status output, routed through loguru.
+"""Status output for the user, through loguru.
 
-The ``print_*`` helpers keep one policy for the whole codebase: INFO and above go to stderr (stdout stays clean for command output such as ``status --json``), DEBUG only when ``--verbose`` is given.
+The ``print_*`` helpers give one policy for the whole codebase. INFO and higher levels go to stderr, so stdout has only the output of commands (for example ``status --json``). DEBUG shows only with ``--verbose``.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ _sink_id: int | None = None
 
 
 def configure(verbose: bool = False) -> None:
-    """(Re)install the stderr sink at INFO, or DEBUG when ``verbose``."""
+    """Install the stderr sink again. The level is INFO, or DEBUG if ``verbose`` is true."""
     global _sink_id
     if _sink_id is not None:
         _loguru.remove(_sink_id)
@@ -58,10 +58,10 @@ def print_info(message: str) -> None:
 
 
 def print_step(message: str) -> None:
-    """Log a step/progress message (INFO)."""
+    """Log a message about a step (INFO)."""
     _log("INFO", "STEP 🔄", message)
 
 
 def print_debug(message: str) -> None:
-    """Log a debug message (DEBUG, shown only with ``--verbose``)."""
+    """Log a debug message (DEBUG). It shows only with ``--verbose``."""
     _log("DEBUG", "DEBG 🐛", message)

@@ -209,7 +209,7 @@ def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeyp
 
     config.write_text("# mine", encoding="utf-8")
     result = invoke("init")
-    assert result.exit_code == 0 and "already exists" in result.output
+    assert result.exit_code == 0 and "is already there" in result.output
     assert config.read_text(encoding="utf-8") == "# mine"
     assert fetched == [binary.parent]
 

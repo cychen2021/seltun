@@ -1,6 +1,6 @@
-//! Command line and the tables of `config.toml` the daemon reads.
+//! The command line and the tables of `config.toml` that the daemon reads.
 //!
-//! The Python CLI reads the same file, so the control address the CLI dials and the one the daemon binds cannot drift apart. The daemon reads `[upstream]`, `[tun]`, `[processes]` and `[daemon]`; an unknown key inside one of them is an error, so a typo cannot silently fall back to a default.
+//! The Python CLI reads the same file. Thus the control address that the CLI uses and the address that the daemon binds are always the same. The daemon reads `[upstream]`, `[tun]`, `[processes]` and `[daemon]`. An unknown key in one of these tables is an error. Thus a typo cannot select a default without a warning.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -18,18 +18,18 @@ pub const DEFAULT_TUN_ADDRESS: &str = "198.19.0.1";
 #[command(
     name = "seltund",
     version,
-    about = "Steers selected processes into a TUN adapter and forwards them to Clash."
+    about = "Steer selected processes into a TUN adapter and forward them to Clash."
 )]
 pub struct Cli {
-    /// The config shared with the `seltun` CLI.
+    /// The config file. The `seltun` CLI uses the same file.
     #[arg(long, default_value = "config.toml")]
     pub config: PathBuf,
 
-    /// The state file (`{"enabled": bool}`) the CLI writes.
+    /// The state file (`{"enabled": bool}`). The CLI writes this file.
     #[arg(long, default_value = "state.json")]
     pub state: PathBuf,
 
-    /// Append the log here instead of writing it to stderr (what autostart uses).
+    /// Add the log to this file. Without this option, the daemon writes the log to stderr. Autostart uses this option.
     #[arg(long)]
     pub log_file: Option<PathBuf>,
 }
@@ -44,10 +44,10 @@ pub enum Protocol {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Upstream {
-    /// Clash's mixed (or SOCKS5 / HTTP) port.
+    /// The mixed port of Clash, or a SOCKS5 port or an HTTP port.
     pub address: SocketAddr,
     pub protocol: Protocol,
-    /// Whether UDP of selected processes goes through Clash (SOCKS5 only); otherwise only DNS goes direct and the rest is dropped.
+    /// If true, the UDP of the selected processes goes through Clash (SOCKS5 only). If false, DNS goes direct and the daemon drops the other UDP.
     pub udp: bool,
 }
 
@@ -62,7 +62,7 @@ pub struct Tun {
 pub struct Settings {
     pub upstream: Upstream,
     pub tun: Tun,
-    /// Entries of `[processes].names`, as written.
+    /// The entries of `[processes].names`, as they are in the file.
     pub processes: Vec<String>,
     pub control: SocketAddr,
 }
@@ -95,7 +95,7 @@ struct DaemonTable {
     control: Option<String>,
 }
 
-/// The tables the daemon reads; the other tables belong to the Python side and are ignored here.
+/// The tables that the daemon reads. The daemon ignores the other tables. They are for the Python side.
 #[derive(Deserialize, Default, Debug)]
 struct File {
     upstream: Option<UpstreamTable>,
@@ -105,19 +105,22 @@ struct File {
 }
 
 fn parse_addr(what: &str, text: &str) -> Result<SocketAddr> {
-    text.parse()
-        .with_context(|| format!("{what} must be host:port with a numeric IP, got {text:?}"))
+    text.parse().with_context(|| {
+        format!("{what} must have the form host:port with a numeric IP. The value is {text:?}.")
+    })
 }
 
 impl Settings {
-    /// Read `path`; a missing file means every default.
+    /// Read `path`. If the file is missing, the daemon uses all defaults.
     pub fn load(path: &Path) -> Result<Self> {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
+            Err(error) => {
+                return Err(error).with_context(|| format!("Cannot read {}", path.display()));
+            },
         };
-        Self::parse(&text).with_context(|| format!("in {}", path.display()))
+        Self::parse(&text).with_context(|| format!("Error in {}", path.display()))
     }
 
     pub fn parse(text: &str) -> Result<Self> {
@@ -126,16 +129,17 @@ impl Settings {
         let tun = file.tun.unwrap_or_default();
         let address: Ipv4Addr = {
             let text = tun.address.as_deref().unwrap_or(DEFAULT_TUN_ADDRESS);
-            text.parse()
-                .with_context(|| format!("[tun].address must be an IPv4 address, got {text:?}"))?
+            text.parse().with_context(|| {
+                format!("[tun].address must be an IPv4 address. The value is {text:?}.")
+            })?
         };
         if address.is_loopback() || address.is_unspecified() {
-            bail!("[tun].address must not be loopback or unspecified");
+            bail!("[tun].address must not be a loopback address or an unspecified address.");
         }
         let protocol = upstream.protocol.unwrap_or_default();
         let udp = upstream.udp.unwrap_or(false);
         if udp && protocol != Protocol::Socks5 {
-            bail!("[upstream].udp needs protocol = \"socks5\"");
+            bail!("[upstream].udp = true needs protocol = \"socks5\".");
         }
         Ok(Self {
             upstream: Upstream {

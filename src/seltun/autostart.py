@@ -1,8 +1,10 @@
-"""Starting the daemon at login, elevated.
+"""Start the daemon at login with administrator rights.
 
-The daemon needs administrator rights (creating the Wintun adapter and its routes), and a Run-key entry cannot elevate without a UAC prompt at every login. So autostart is a Task Scheduler task that runs ``seltund.exe`` at the user's logon with the highest privileges, no prompt: the same arrangement Clash Verge's service mode achieves with a service. Creating or removing the task needs an elevated terminal once; starting, stopping and querying it does not.
+The daemon needs administrator rights to create the Wintun adapter and its routes. A Run-key entry cannot get these rights without a UAC prompt at each login. Thus autostart is a Task Scheduler task. At the logon of the user, it starts ``seltund.exe`` with the highest privileges and shows no prompt. The service mode of Clash Verge does the same with a service.
 
-The task name is :data:`NAME`.
+To create or remove the task, use an elevated terminal one time. To start, stop, or query the task, you do not need an elevated terminal.
+
+The name of the task is :data:`NAME`.
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ def is_admin() -> bool:
 
 def _schtasks(*args: str) -> subprocess.CompletedProcess[str]:
     if sys.platform != "win32":
-        raise SeltunError("autostart is implemented on Windows only")
+        raise SeltunError("Autostart works on Windows only.")
     return subprocess.run(
         ["schtasks", *args],
         capture_output=True,
@@ -54,7 +56,7 @@ def _failure(result: subprocess.CompletedProcess[str]) -> SeltunError:
 
 
 def task_xml(user: str, argv: list[str]) -> str:
-    """The task definition: at ``user``'s logon, highest privileges, no time limit, not stopped on battery."""
+    """The task definition. The task starts at the logon of ``user`` with the highest privileges. It has no time limit, and it does not stop on battery power."""
     program, *arguments = argv
     joined = subprocess.list2cmdline(arguments)
     return f"""<?xml version="1.0" encoding="UTF-16"?>
@@ -76,11 +78,9 @@ def task_xml(user: str, argv: list[str]) -> str:
 
 
 def enable(argv: list[str]) -> str:
-    """Register (or replace) the logon task for ``argv``; returns the command line it runs."""
+    """Register the logon task for ``argv``. The code replaces an existing task. Return the command line that the task runs."""
     if not is_admin():
-        raise SeltunError(
-            "creating the startup task needs an elevated terminal (run it once as administrator)"
-        )
+        raise SeltunError("To create the startup task, use an elevated terminal.")
     domain = os.environ.get("USERDOMAIN", "")
     user = f"{domain}\\{getpass.getuser()}" if domain else getpass.getuser()
     with tempfile.TemporaryDirectory() as tmp:
@@ -93,11 +93,11 @@ def enable(argv: list[str]) -> str:
 
 
 def disable() -> bool:
-    """Remove the task; returns whether there was one."""
+    """Remove the task. Return true if there was a task."""
     if registered() is None:
         return False
     if not is_admin():
-        raise SeltunError("removing the startup task needs an elevated terminal")
+        raise SeltunError("To remove the startup task, use an elevated terminal.")
     result = _schtasks("/Delete", "/TN", NAME, "/F")
     if result.returncode != 0:
         raise _failure(result)
@@ -105,7 +105,7 @@ def disable() -> bool:
 
 
 def registered() -> str | None:
-    """The command line the task runs, or ``None`` if there is no task."""
+    """The command line that the task runs, or ``None`` if there is no task."""
     result = _schtasks("/Query", "/TN", NAME, "/XML")
     if result.returncode != 0:
         return None
@@ -122,12 +122,12 @@ def registered() -> str | None:
 
 
 def run() -> None:
-    """Start the task now, elevated, without a prompt."""
+    """Start the task with administrator rights. No prompt shows."""
     result = _schtasks("/Run", "/TN", NAME)
     if result.returncode != 0:
         raise _failure(result)
 
 
 def end() -> None:
-    """Stop the task's running instance."""
+    """Stop the instance of the task that runs."""
     _schtasks("/End", "/TN", NAME)

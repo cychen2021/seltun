@@ -4,11 +4,11 @@ __all__ = ["SeltunError", "DaemonNotRunning"]
 
 
 class SeltunError(RuntimeError):
-    """Base class for expected, user-facing failures.
+    """Base class for the failures that the user can expect.
 
-    The CLI layer maps this to a clean non-zero exit; internal callers can catch it like any other exception.
+    The CLI layer ends the command with a clean non-zero exit code. Internal callers can catch it as they catch each other exception.
     """
 
 
 class DaemonNotRunning(SeltunError):
-    """Nothing answers on the daemon's control address."""
+    """No program answers on the control address of the daemon."""
