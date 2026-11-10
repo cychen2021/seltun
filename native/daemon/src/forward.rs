@@ -135,6 +135,16 @@ where
     let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Tcp, src, dst))
         .await
         .unwrap_or(Verdict::Direct);
+    // Windows tests each adapter for Internet access. If the test passes on the TUN adapter, Windows can make that adapter the main connection and show "LAN" instead of Wi-Fi. The daemon ends the test flow, so the test fails on this adapter only. The same test on the physical interface does not pass through the TUN adapter.
+    let mut first = Vec::new();
+    if verdict == Verdict::Direct && dst.port() == 80 {
+        first = read_first_bytes(&mut flow).await;
+        if is_connectivity_probe(&first) {
+            tracing::debug!(%dst, "connectivity probe ended");
+            let _ = flow.shutdown().await;
+            return;
+        }
+    }
     let upstream = match verdict {
         Verdict::Proxy => socks::connect(&ctx.upstream, dst).await,
         Verdict::Direct => connect_direct(&ctx, dst).await,
@@ -147,9 +157,35 @@ where
             return;
         },
     };
+    if !first.is_empty() && upstream.write_all(&first).await.is_err() {
+        let _ = flow.shutdown().await;
+        return;
+    }
     let _ = tokio::io::copy_bidirectional(&mut flow, &mut upstream).await;
     let _ = upstream.shutdown().await;
     let _ = flow.shutdown().await;
+}
+
+/// The time that the daemon waits for the first bytes of a plain HTTP flow.
+const FIRST_BYTES_WAIT: Duration = Duration::from_millis(1500);
+
+/// Read the first bytes that the client sends. If the client sends nothing in time, return no bytes.
+async fn read_first_bytes<S: AsyncRead + Unpin>(flow: &mut S) -> Vec<u8> {
+    let mut buffer = vec![0u8; 1024];
+    match tokio::time::timeout(FIRST_BYTES_WAIT, flow.read(&mut buffer)).await {
+        Ok(Ok(count)) => {
+            buffer.truncate(count);
+            buffer
+        },
+        _ => Vec::new(),
+    }
+}
+
+/// True if the bytes are the HTTP request of the Windows test for Internet access.
+fn is_connectivity_probe(request: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(request).to_ascii_lowercase();
+    text.starts_with("get ")
+        && (text.contains("host: www.msftconnecttest.com") || text.contains("microsoft ncsi"))
 }
 
 async fn handle_udp<S>(mut flow: S, src: SocketAddr, dst: SocketAddr, ctx: Arc<Context>)
@@ -306,6 +342,16 @@ mod tests {
             "1.1.1.1:80".parse().unwrap(),
         );
         assert_eq!(v, Verdict::Direct);
+    }
+
+    #[test]
+    fn windows_connectivity_test_is_found() {
+        let probe = b"GET /connecttest.txt HTTP/1.1\r\nConnection: Close\r\nHost: www.msftconnecttest.com\r\nUser-Agent: Microsoft NCSI\r\n\r\n";
+        assert!(is_connectivity_probe(probe));
+        assert!(!is_connectivity_probe(
+            b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
+        ));
+        assert!(!is_connectivity_probe(b""));
     }
 
     #[test]
