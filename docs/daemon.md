@@ -79,6 +79,8 @@ The creation of the adapter and the routes needs administrator rights. A Run-key
 
 Without the task, run `seltun daemon run` in an elevated terminal. The daemon then runs in the foreground.
 
+`seltund.exe` is a program of the Windows subsystem. It has no console window. Thus Task Scheduler does not open a window, and no user can stop the daemon when a window closes. `seltun daemon run` is different: the daemon attaches to the terminal that started it, and it writes its log there. Ctrl+C stops it. If the output goes to a file or a pipe, the daemon keeps that output. A run with `--log-file` never uses a terminal.
+
 A daemon that is not elevated answers on the control channel. It reports the reason why it cannot turn on.
 
 `wintun.dll` must be in the same directory as `seltund.exe`. `seltun init` or the wheel build puts it there. The file comes from wintun.net. `drivers.py` has the SHA-256 value that the file must have.

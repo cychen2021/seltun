@@ -5,6 +5,9 @@ use std::net::SocketAddr;
 
 use super::Proto;
 
+/// Do nothing. Only Windows has a console that the daemon must attach to.
+pub fn attach_parent_console() {}
+
 pub fn is_elevated() -> bool {
     false
 }

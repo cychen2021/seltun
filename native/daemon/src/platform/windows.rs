@@ -36,6 +36,36 @@ pub fn is_elevated() -> bool {
     unsafe { IsUserAnAdmin() != 0 }
 }
 
+/// Connect the standard output and the standard error of this process to the console of the parent process.
+///
+/// `seltund.exe` is a program of the Windows subsystem. Thus it has no console window of its own, and Task Scheduler does not open a window for it. For a foreground run in a terminal, this function gives the daemon the output to that terminal. Ctrl+C then also reaches the daemon. If the parent has no console, or the output is redirected, the call does nothing.
+pub fn attach_parent_console() {
+    use std::os::windows::io::IntoRawHandle;
+
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Console::{
+        ATTACH_PARENT_PROCESS, AttachConsole, GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+        SetStdHandle,
+    };
+
+    // SAFETY: `AttachConsole` has no pointer arguments. `SetStdHandle` receives a valid handle. The code leaks the handle on purpose, because the process uses it until it stops.
+    unsafe {
+        // The process already has an output if the parent redirected it to a file or a pipe. Then keep it.
+        let current = GetStdHandle(STD_ERROR_HANDLE);
+        if !current.is_null() && current != INVALID_HANDLE_VALUE {
+            return;
+        }
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            return;
+        }
+        if let Ok(out) = std::fs::OpenOptions::new().write(true).open("CONOUT$") {
+            let handle = out.into_raw_handle();
+            SetStdHandle(STD_OUTPUT_HANDLE, handle);
+            SetStdHandle(STD_ERROR_HANDLE, handle);
+        }
+    }
+}
+
 /// A row with `(local address, local port, remote address, remote port, pid)` for a socket. UDP has no remote address.
 type Row = (Ipv4Addr, u16, Ipv4Addr, u16, u32);
 

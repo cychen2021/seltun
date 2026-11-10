@@ -1,3 +1,6 @@
+// The daemon has no console window of its own. Task Scheduler then does not open a window, and no window can stop the daemon when a user closes it.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use std::io::IsTerminal;
 use std::sync::{Arc, Mutex};
 
@@ -40,6 +43,10 @@ fn init_logging(cli: &Cli) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // A foreground run writes to the terminal of the parent. A run with a log file does not use a terminal.
+    if !std::env::args().any(|a| a == "--log-file" || a.starts_with("--log-file=")) {
+        seltund::platform::attach_parent_console();
+    }
     let cli = Cli::parse();
     init_logging(&cli)?;
 
