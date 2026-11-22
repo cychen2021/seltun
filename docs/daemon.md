@@ -45,6 +45,8 @@ Windows sends a flow into the adapter. The source address of the flow is then th
 
 **Network icon:** Windows tests each adapter for Internet access. If the test passes on the adapter, Windows can use the adapter as the main connection. The taskbar then shows "LAN" and not Wi-Fi. The adapter has the interface metric 9999, but the metric does not prevent this, because the routes of the adapter are more specific than the default route. Thus the daemon ends the HTTP request of the test (`www.msftconnecttest.com`) when it arrives in the adapter. The test then fails on the adapter only, and Windows keeps the physical connection as the main connection. The test on the physical interface does not use the adapter.
 
+**DNS servers of the adapter:** Some programs use only the DNS servers of the interface with the best route to the Internet. An example is cargo-binstall. Because of the half-default routes, that interface is the adapter. An adapter without DNS servers shows only the IPv6 placeholders `fec0:0:0:ffff::1` to `::3`. These placeholders do not answer, and the programs then cannot resolve names. Thus the daemon copies the DNS servers of the physical interface to the adapter with `netsh`. It does not copy the placeholders and the link-local IPv6 servers. It examines the servers again after five seconds, and it copies a new list when the list changes. The code is `mirror_dns` in `daemon.rs`.
+
 **ICMP echo:** The daemon sends the ping replies. A userspace program cannot forward an ICMP echo. Thus each ping gets a reply when seltun is on.
 
 ### What the upstream proxy sees

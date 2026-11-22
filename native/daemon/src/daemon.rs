@@ -205,10 +205,12 @@ async fn start(settings: Settings) -> Result<Active> {
     let report = failure.clone();
     let mtu = settings.tun.mtu;
     let task = tokio::spawn(async move {
+        let dns = tokio::spawn(mirror_dns(index));
         if let Err(error) = forward::run(device, ctx, mtu, stopped).await {
             tracing::error!("The data path failed: {error:#}");
             *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
         }
+        dns.abort();
         // The adapter goes away with the stack, and the routes go with it. The code also removes the routes, to be sure.
         drop(routes);
     });
@@ -218,6 +220,53 @@ async fn start(settings: Settings) -> Result<Active> {
         task,
         failure,
     })
+}
+
+/// The time between two checks of the DNS servers of the physical interface.
+#[cfg(windows)]
+const DNS_CHECK: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Give the TUN adapter the DNS servers of the physical interface, and keep them the same when the physical interface changes. The task runs until the data path stops it.
+///
+/// Some programs use only the DNS servers of the interface with the best route to the Internet. Because of the half-default routes, that interface is the TUN adapter. Without servers of its own, the adapter shows only the IPv6 placeholders `fec0:0:0:ffff::1` to `::3`, which do not answer. The programs then cannot resolve names. A query to a copied server takes the same path as before: a server in the local network has a more specific route, and the daemon sends the other queries of a process that is not selected direct.
+#[cfg(windows)]
+async fn mirror_dns(tun_index: u32) {
+    use crate::platform;
+
+    let mut applied: Option<Vec<std::net::IpAddr>> = None;
+    loop {
+        let servers = tokio::task::spawn_blocking(move || {
+            platform::physical_interface(tun_index).map(|index| {
+                platform::dns_servers(index)
+                    .into_iter()
+                    .filter(platform::is_usable_dns)
+                    .collect::<Vec<_>>()
+            })
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some(servers) = servers
+            && applied.as_ref() != Some(&servers)
+        {
+            let list = servers.clone();
+            match tokio::task::spawn_blocking(move || platform::set_dns_servers(tun_index, &list))
+                .await
+            {
+                Ok(Ok(())) => tracing::info!(
+                    ?servers,
+                    "The TUN adapter uses the DNS servers of the physical interface."
+                ),
+                Ok(Err(error)) => {
+                    tracing::warn!("Cannot set the DNS servers of the TUN adapter: {error}")
+                },
+                Err(_) => {},
+            }
+            // Also after an error, do not try the same list again. A new list starts a new attempt.
+            applied = Some(servers);
+        }
+        tokio::time::sleep(DNS_CHECK).await;
+    }
 }
 
 #[cfg(not(windows))]

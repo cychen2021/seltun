@@ -6,7 +6,7 @@
 
 use std::io::{Error, Result};
 use std::mem::size_of;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::os::windows::io::AsRawSocket;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
@@ -15,11 +15,15 @@ use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetExtendedTcpTable, GetExtendedUdpTable, GetIfEntry2, GetIpForwardTable2,
-    GetIpInterfaceEntry, MIB_IF_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
-    MIB_TCPTABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+    FreeMibTable, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_FRIENDLY_NAME, GAA_FLAG_SKIP_MULTICAST,
+    GAA_FLAG_SKIP_UNICAST, GetAdaptersAddresses, GetExtendedTcpTable, GetExtendedUdpTable,
+    GetIfEntry2, GetIpForwardTable2, GetIpInterfaceEntry, IP_ADAPTER_ADDRESSES_LH, MIB_IF_ROW2,
+    MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_TCPTABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
+    TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
 };
-use windows_sys::Win32::Networking::WinSock::{AF_INET, IPPROTO_IP, setsockopt};
+use windows_sys::Win32::Networking::WinSock::{
+    AF_INET, AF_INET6, AF_UNSPEC, IPPROTO_IP, SOCKADDR, SOCKADDR_IN, SOCKADDR_IN6, setsockopt,
+};
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
@@ -332,6 +336,153 @@ fn netsh(args: &[&str]) -> Result<()> {
     }
 }
 
+/// The IP address in a socket address that Windows gives. Other address families give none.
+///
+/// # Safety
+///
+/// `addr` must be null or point to a valid `SOCKADDR_IN` or `SOCKADDR_IN6`, as its family tells.
+unsafe fn sockaddr_ip(addr: *const SOCKADDR) -> Option<IpAddr> {
+    if addr.is_null() {
+        return None;
+    }
+    // SAFETY: the caller guarantees that `addr` points to a socket address of the family that it tells.
+    unsafe {
+        match (*addr).sa_family {
+            AF_INET => {
+                let v4 = addr.cast::<SOCKADDR_IN>().read_unaligned();
+                Some(IpAddr::V4(ip(v4.sin_addr.S_un.S_addr)))
+            },
+            AF_INET6 => {
+                let v6 = addr.cast::<SOCKADDR_IN6>().read_unaligned();
+                Some(IpAddr::V6(Ipv6Addr::from(v6.sin6_addr.u.Byte)))
+            },
+            _ => None,
+        }
+    }
+}
+
+/// The DNS servers of the interface `index`, in the sequence that Windows uses them. The list includes the servers from DHCP. If the interface does not exist, the list is empty.
+pub fn dns_servers(index: u32) -> Vec<IpAddr> {
+    let flags = GAA_FLAG_SKIP_UNICAST
+        | GAA_FLAG_SKIP_ANYCAST
+        | GAA_FLAG_SKIP_MULTICAST
+        | GAA_FLAG_SKIP_FRIENDLY_NAME;
+    // The structures have `u64` fields. A `u64` buffer gives the necessary alignment.
+    let mut size: u32 = 16 * 1024;
+    let mut buf: Vec<u64> = Vec::new();
+    let mut done = false;
+    for _ in 0..4 {
+        buf.resize((size as usize).div_ceil(8), 0);
+        // SAFETY: `buf` has at least `size` bytes, and the call receives this size.
+        let code = unsafe {
+            GetAdaptersAddresses(
+                AF_UNSPEC as u32,
+                flags,
+                std::ptr::null(),
+                buf.as_mut_ptr().cast(),
+                &mut size,
+            )
+        };
+        match code {
+            0 => {
+                done = true;
+                break;
+            },
+            111 => continue, // ERROR_BUFFER_OVERFLOW: `size` now has the necessary size.
+            _ => return Vec::new(),
+        }
+    }
+    if !done {
+        return Vec::new();
+    }
+    let mut servers = Vec::new();
+    // SAFETY: the call succeeded. Thus `buf` has a list of adapters, and each `Next` pointer is null or points into `buf`.
+    unsafe {
+        let mut adapter = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+        while !adapter.is_null() {
+            let a = &*adapter;
+            if a.Anonymous1.Anonymous.IfIndex == index || a.Ipv6IfIndex == index {
+                let mut dns = a.FirstDnsServerAddress;
+                while !dns.is_null() {
+                    if let Some(ip) = sockaddr_ip((*dns).Address.lpSockaddr) {
+                        servers.push(ip);
+                    }
+                    dns = (*dns).Next;
+                }
+                break;
+            }
+            adapter = a.Next;
+        }
+    }
+    servers
+}
+
+/// The `netsh` commands that give the interface `index` the DNS servers `servers` of one family (`ipv4` or `ipv6`). An empty list removes all servers of the family.
+fn dns_commands(index: u32, family: &str, servers: &[IpAddr]) -> Vec<Vec<String>> {
+    let name = format!("name={index}");
+    let Some((first, others)) = servers.split_first() else {
+        return vec![
+            [
+                "interface",
+                family,
+                "set",
+                "dnsservers",
+                &name,
+                "source=static",
+                "address=none",
+            ]
+            .map(String::from)
+            .to_vec(),
+        ];
+    };
+    let mut commands = vec![
+        [
+            "interface",
+            family,
+            "set",
+            "dnsservers",
+            &name,
+            "source=static",
+            &format!("address={first}"),
+            "register=none",
+            "validate=no",
+        ]
+        .map(String::from)
+        .to_vec(),
+    ];
+    for (i, server) in others.iter().enumerate() {
+        commands.push(
+            [
+                "interface",
+                family,
+                "add",
+                "dnsservers",
+                &name,
+                &format!("address={server}"),
+                &format!("index={}", i + 2),
+                "validate=no",
+            ]
+            .map(String::from)
+            .to_vec(),
+        );
+    }
+    commands
+}
+
+/// Give the interface `index` the DNS servers `servers`. The IPv4 list replaces the IPv4 servers of the interface. The IPv6 list replaces the IPv6 servers only if it is not empty, because Windows shows its placeholder servers on an IPv6 interface without servers.
+pub fn set_dns_servers(index: u32, servers: &[IpAddr]) -> Result<()> {
+    let (v4, v6): (Vec<IpAddr>, Vec<IpAddr>) = servers.iter().partition(|ip| ip.is_ipv4());
+    let mut commands = dns_commands(index, "ipv4", &v4);
+    if !v6.is_empty() {
+        commands.extend(dns_commands(index, "ipv6", &v6));
+    }
+    for command in commands {
+        let args: Vec<&str> = command.iter().map(String::as_str).collect();
+        netsh(&args)?;
+    }
+    Ok(())
+}
+
 /// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. With these routes, the packets of a process leave from the address of the TUN. The routes go away with the adapter. The code also removes them when the daemon stops.
 pub struct Routes {
     interface: String,
@@ -410,6 +561,45 @@ mod tests {
             assert_eq!(unsafe { GetIfEntry2(&mut link) }, 0);
             assert_eq!(link.OperStatus, 1, "The interface {index} is not up.");
         }
+    }
+
+    #[test]
+    fn dns_commands_set_the_first_server_and_add_the_others() {
+        let servers: Vec<IpAddr> = vec!["192.168.1.1".parse().unwrap(), "1.1.1.1".parse().unwrap()];
+        let commands = dns_commands(53, "ipv4", &servers);
+        assert_eq!(
+            commands,
+            vec![
+                "interface ipv4 set dnsservers name=53 source=static address=192.168.1.1 register=none validate=no",
+                "interface ipv4 add dnsservers name=53 address=1.1.1.1 index=2 validate=no",
+            ]
+            .into_iter()
+            .map(|c| c.split(' ').map(String::from).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn dns_commands_without_servers_remove_them() {
+        assert_eq!(
+            dns_commands(53, "ipv4", &[]),
+            vec![
+                "interface ipv4 set dnsservers name=53 source=static address=none"
+                    .split(' ')
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            ]
+        );
+    }
+
+    #[test]
+    fn physical_interface_has_readable_dns_servers() {
+        // A computer that is offline has no physical interface. Then there is nothing to read.
+        if let Some(index) = physical_interface(u32::MAX) {
+            let servers = dns_servers(index);
+            assert!(servers.iter().all(|ip| !ip.is_unspecified()), "{servers:?}");
+        }
+        assert!(dns_servers(u32::MAX).is_empty());
     }
 
     #[test]
