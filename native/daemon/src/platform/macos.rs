@@ -219,14 +219,31 @@ fn scoped_default_args<'a>(
     args
 }
 
+/// True if a socket that is pinned to `interface` finds a route through that interface.
+fn scoped_lookup_works(interface: &str) -> bool {
+    Command::new("/sbin/route")
+        .args(["-n", "get", "-ifscope", interface, "1.1.1.1"])
+        .stderr(Stdio::null())
+        .output()
+        .is_ok_and(|output| {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .any(|line| line.trim() == format!("interface: {interface}"))
+        })
+}
+
 /// Make sure that the primary interface has a scoped default route. If the primary interface or its router changed, remove the old route of the daemon first.
-fn ensure_scoped_default(interface: &str, router: Option<&str>) {
+///
+/// If `verify` is true and the interface and the router did not change, the function also makes sure that the route is still there. macOS removes the routes of an interface when the interface connects again, for example after a wake from sleep or a change of the Wi-Fi network.
+fn ensure_scoped_default(interface: &str, router: Option<&str>, verify: bool) {
     let mut current = SCOPED_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(old) = current.as_ref() {
         if old.interface == interface && old.router.as_deref() == router {
-            return;
-        }
-        if old.added {
+            if !verify || scoped_lookup_works(interface) {
+                return;
+            }
+        } else if old.added {
             let _ = route(&scoped_default_args(
                 "delete",
                 &old.interface,
@@ -270,8 +287,8 @@ fn remove_scoped_default() {
     }
 }
 
-/// The index of the physical interface: the primary IPv4 interface of the system configuration, if it is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. The TUN routes do not change the primary interface, because the utun interface is not a network service. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect. The call also gives the interface a scoped default route (see [`ScopedDefault`]).
-pub fn physical_interface(exclude: u32) -> Option<u32> {
+/// The primary IPv4 interface of the system configuration and its router. The TUN routes do not change the primary interface, because the utun interface is not a network service.
+fn primary() -> Option<(String, Option<String>)> {
     let mut child = Command::new("/usr/sbin/scutil")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -286,15 +303,35 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
     let output = child.wait_with_output().ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     let name = scutil_value(&text, "PrimaryInterface")?;
-    let index = if_index(name)?;
+    Some((
+        name.to_owned(),
+        scutil_value(&text, "Router").map(str::to_owned),
+    ))
+}
+
+/// The index of the physical interface: the primary IPv4 interface, if it is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect. The call also gives a new primary interface a scoped default route (see [`ScopedDefault`]).
+pub fn physical_interface(exclude: u32) -> Option<u32> {
+    let (name, router) = primary()?;
+    let index = if_index(&name)?;
     if index == exclude {
         return None;
     }
     // Only root can add the route. The tests do not run as root and do not change the routes.
     if is_elevated() {
-        ensure_scoped_default(name, scutil_value(&text, "Router"));
+        ensure_scoped_default(&name, router.as_deref(), false);
     }
     Some(index)
+}
+
+/// Make sure that the primary interface has a scoped default route that works. The daemon calls this function at a regular interval while the TUN routes are present.
+///
+/// Programs other than the daemon also pin sockets to the primary interface, for example the DNS resolver of macOS and VPN clients. These sockets do not enter the TUN. Thus the daemon cannot wait for a direct flow before it adds the route. Without the route, DNS can fail, and then no flow starts at all.
+pub fn keep_scoped_default(exclude: u32) {
+    if let Some((name, router)) = primary()
+        && if_index(&name).is_some_and(|index| index != exclude)
+    {
+        ensure_scoped_default(&name, router.as_deref(), true);
+    }
 }
 
 /// Pin `socket` to the interface with this index (`IP_BOUND_IF`). The traffic of the socket leaves through this interface, although the TUN routes cover all destinations.
@@ -342,6 +379,10 @@ impl Routes {
         let routes = Self {
             interface: if_name(tun_index)?,
         };
+        // Add the scoped default route before the half-default routes. Sockets that are pinned to the primary interface then never lose their route. If the network is not up yet, `keep_scoped_default` adds the route later.
+        if let Some((name, router)) = primary() {
+            ensure_scoped_default(&name, router.as_deref(), false);
+        }
         for half in HALVES {
             // An old route from a daemon that stopped without cleanup blocks the new one.
             let _ = route(&["delete", "-net", half]);

@@ -179,12 +179,16 @@ async fn start(settings: Settings) -> Result<Active> {
     let task = tokio::spawn(async move {
         #[cfg(windows)]
         let dns = tokio::spawn(mirror_dns(index));
+        #[cfg(target_os = "macos")]
+        let scoped = tokio::spawn(keep_scoped_default(index));
         if let Err(error) = forward::run(device, ctx, mtu, stopped).await {
             tracing::error!("The data path failed: {error:#}");
             *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
         }
         #[cfg(windows)]
         dns.abort();
+        #[cfg(target_os = "macos")]
+        scoped.abort();
         // The adapter goes away with the stack, and the routes go with it. The code also removes the routes, to be sure.
         drop(routes);
     });
@@ -291,6 +295,21 @@ async fn mirror_dns(tun_index: u32) {
             applied = Some(servers);
         }
         tokio::time::sleep(DNS_CHECK).await;
+    }
+}
+
+/// The time between two checks of the scoped default route of the primary interface.
+#[cfg(target_os = "macos")]
+const SCOPED_ROUTE_CHECK: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Keep a working scoped default route on the primary interface while the data path runs (see `platform::keep_scoped_default`). The task follows a change of the network, for example from home to an office, and it adds the route again if macOS removed it.
+#[cfg(target_os = "macos")]
+async fn keep_scoped_default(tun_index: u32) {
+    loop {
+        let _ =
+            tokio::task::spawn_blocking(move || crate::platform::keep_scoped_default(tun_index))
+                .await;
+        tokio::time::sleep(SCOPED_ROUTE_CHECK).await;
     }
 }
 
