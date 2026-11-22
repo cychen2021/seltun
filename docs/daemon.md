@@ -1,5 +1,7 @@
 # The daemon (`seltund`)
 
+This page tells the design on Windows. [macos.md](macos.md) tells the differences on macOS.
+
 ## Design
 
 seltun uses the design of a system-wide TUN adapter, and it adds a filter for processes. The daemon does these steps when the switch is on:

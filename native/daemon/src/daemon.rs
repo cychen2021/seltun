@@ -149,25 +149,62 @@ impl Daemon {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 async fn start(settings: Settings) -> Result<Active> {
-    use std::net::Ipv4Addr;
-
     use anyhow::Context as _;
     use tun::AbstractDevice;
 
     use crate::forward::{self, Context};
     use crate::matcher::Matcher;
-    use crate::platform::{Routes, is_elevated};
+    use crate::platform::{ELEVATION_HINT, Routes, is_elevated};
+
+    if !is_elevated() {
+        bail!(ELEVATION_HINT);
+    }
+    let device = create_device(&settings)?;
+    let index = device
+        .tun_index()
+        .context("Cannot read the adapter index")? as u32;
+    let routes = Routes::install(index).context("Cannot add the TUN routes")?;
+
+    let ctx = Arc::new(Context::new(
+        settings.upstream.clone(),
+        Matcher::new(&settings.processes),
+        index,
+    ));
+    let (stop, stopped) = watch::channel(false);
+    let failure = Arc::new(Mutex::new(None));
+    let report = failure.clone();
+    let mtu = settings.tun.mtu;
+    let task = tokio::spawn(async move {
+        #[cfg(windows)]
+        let dns = tokio::spawn(mirror_dns(index));
+        if let Err(error) = forward::run(device, ctx, mtu, stopped).await {
+            tracing::error!("The data path failed: {error:#}");
+            *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
+        }
+        #[cfg(windows)]
+        dns.abort();
+        // The adapter goes away with the stack, and the routes go with it. The code also removes the routes, to be sure.
+        drop(routes);
+    });
+    Ok(Active {
+        settings,
+        stop,
+        task,
+        failure,
+    })
+}
+
+#[cfg(windows)]
+fn create_device(settings: &Settings) -> Result<tun::AsyncDevice> {
+    use std::net::Ipv4Addr;
+
+    use anyhow::Context as _;
 
     /// A fixed adapter GUID. Windows then keeps one network profile for the adapter. Without it, Windows makes a new profile at each start.
     const ADAPTER_GUID: u128 = 0x5e17_0a11_c0de_4f1d_9a3b_2c64_7e01_5e17;
 
-    if !is_elevated() {
-        bail!(
-            "To create the TUN adapter, the daemon must run with administrator rights. Run `seltun autostart enable` one time in an elevated terminal. Then run `seltun daemon start`."
-        );
-    }
     let wintun = std::env::current_exe()?.with_file_name("wintun.dll");
     if !wintun.is_file() {
         bail!(
@@ -189,37 +226,25 @@ async fn start(settings: Settings) -> Result<Active> {
         platform.device_guid(ADAPTER_GUID);
         platform.wintun_file(wintun.as_os_str());
     });
-    let device = tun::create_as_async(&config).context("Cannot create the Wintun adapter")?;
-    let index = device
-        .tun_index()
-        .context("Cannot read the adapter index")? as u32;
-    let routes = Routes::install(index).context("Cannot add the TUN routes")?;
+    tun::create_as_async(&config).context("Cannot create the Wintun adapter")
+}
 
-    let ctx = Arc::new(Context::new(
-        settings.upstream.clone(),
-        Matcher::new(&settings.processes),
-        index,
-    ));
-    let (stop, stopped) = watch::channel(false);
-    let failure = Arc::new(Mutex::new(None));
-    let report = failure.clone();
-    let mtu = settings.tun.mtu;
-    let task = tokio::spawn(async move {
-        let dns = tokio::spawn(mirror_dns(index));
-        if let Err(error) = forward::run(device, ctx, mtu, stopped).await {
-            tracing::error!("The data path failed: {error:#}");
-            *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{error:#}"));
-        }
-        dns.abort();
-        // The adapter goes away with the stack, and the routes go with it. The code also removes the routes, to be sure.
-        drop(routes);
-    });
-    Ok(Active {
-        settings,
-        stop,
-        task,
-        failure,
-    })
+/// Create a utun interface. macOS gives it the next free name (`utunN`), so the daemon does not use `[tun].name`. A utun interface is point to point. Its peer is the next address in the /30 network.
+#[cfg(target_os = "macos")]
+fn create_device(settings: &Settings) -> Result<tun::AsyncDevice> {
+    use std::net::Ipv4Addr;
+
+    use anyhow::Context as _;
+
+    let peer = Ipv4Addr::from(u32::from(settings.tun.address).wrapping_add(1));
+    let mut config = tun::Configuration::default();
+    config
+        .address(settings.tun.address)
+        .destination(peer)
+        .netmask(Ipv4Addr::new(255, 255, 255, 252))
+        .mtu(settings.tun.mtu)
+        .up();
+    tun::create_as_async(&config).context("Cannot create the utun interface")
 }
 
 /// The time between two checks of the DNS servers of the physical interface.
@@ -269,9 +294,9 @@ async fn mirror_dns(tun_index: u32) {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 async fn start(_settings: Settings) -> Result<Active> {
-    bail!("seltund works on Windows only.")
+    bail!(crate::platform::ELEVATION_HINT)
 }
 
 #[cfg(test)]

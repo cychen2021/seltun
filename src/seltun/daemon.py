@@ -1,12 +1,13 @@
 """Find and start ``seltund``, the Rust daemon (``docs/daemon.md``).
 
-The wheel has the binary and ``wintun.dll`` in ``seltun/bin/`` (``hatch_build.py``). In a source checkout, the fallback is ``native/target/release/``. The CLI gives the daemon absolute ``--config`` and ``--state`` paths. Thus the daemon does not depend on ``PATH`` or on the working directory.
+The wheel has the binary in ``seltun/bin/`` (``hatch_build.py``), and on Windows also ``wintun.dll``. In a source checkout, the fallback is ``native/target/release/``. The CLI gives the daemon absolute ``--config`` and ``--state`` paths. Thus the daemon does not depend on ``PATH`` or on the working directory.
 
-The name of the executable is important: the upstream proxy sees each forwarded connection as a connection of the process ``seltund.exe``.
+The name of the executable is important: the upstream proxy sees each forwarded connection as a connection of the process ``seltund.exe`` (``seltund`` on macOS).
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -56,7 +57,12 @@ def command(config: Path, state: Path, log: Path | None) -> list[str]:
 
 
 def run(argv: list[str]) -> int:
-    """Run the daemon in the foreground until it stops. Ctrl+C also reaches the daemon. Thus the code waits for the daemon to remove the adapter."""
+    """Run the daemon in the foreground until it stops. Ctrl+C also reaches the daemon. Thus the code waits for the daemon to remove the adapter.
+
+    On macOS, the daemon must run as root. If this process is not root, ``sudo`` starts the daemon and asks for the password if it must. The command line has absolute paths, so the files of the user stay the same.
+    """
+    if sys.platform == "darwin" and os.geteuid() != 0:
+        argv = ["sudo", *argv]
     process = subprocess.Popen(argv)
     try:
         return process.wait()

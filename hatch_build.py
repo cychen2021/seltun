@@ -2,6 +2,8 @@
 
 The daemon is a Rust binary (``native/daemon/``). A regular wheel build runs ``cargo build --release``. It puts the binary, the pinned Wintun driver DLL, and ``config.example.toml`` in the package. ``seltun`` looks for the binary and the DLL in ``seltun/bin/`` first. The wheel has a tag for this platform.
 
+On macOS, the hook signs the binary with the certificate that ``scripts/install-mac.sh`` creates, if the certificate is in the keychain. macOS then knows the daemon by a fixed identity, and the permissions and the background item of the daemon stay after a new build. An ad-hoc signature changes with each build.
+
 An editable install (``uv sync``) does none of this. ``seltun`` then uses ``native/target/release/``, which ``cargo build --release`` keeps current. ``seltun init`` downloads the DLL next to the binary.
 """
 
@@ -18,6 +20,33 @@ from typing import Any
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 DAEMON_EXE = "seltund.exe" if sys.platform == "win32" else "seltund"
+SIGNING_IDENTIFIER = "io.github.cychen2021.seltund"
+
+
+def _sign(binary: Path) -> None:
+    """Sign ``binary`` with the fixed certificate (``SELTUN_CERT``, see ``scripts/install-mac.sh``). If the certificate is missing, keep the ad-hoc signature."""
+    cert = os.environ.get("SELTUN_CERT", "seltun Code Signing")
+    found = subprocess.run(
+        ["security", "find-certificate", "-c", cert], capture_output=True
+    )
+    if found.returncode != 0:
+        print(
+            f"seltun: the certificate {cert!r} is not in the keychain. The daemon keeps an ad-hoc signature. Run scripts/install-mac.sh to create the certificate.",
+            file=sys.stderr,
+        )
+        return
+    subprocess.run(
+        [
+            "codesign",
+            "--force",
+            "--sign",
+            cert,
+            "--identifier",
+            SIGNING_IDENTIFIER,
+            str(binary),
+        ],
+        check=True,
+    )
 
 
 def _load_drivers(root: Path) -> Any:
@@ -51,6 +80,8 @@ class CustomBuildHook(BuildHookInterface):
             check=True,
         )
         target = Path(os.environ.get("CARGO_TARGET_DIR") or root / "native" / "target")
+        if sys.platform == "darwin":
+            _sign(target / "release" / DAEMON_EXE)
         build_data["force_include"][str(root / "config.example.toml")] = (
             "seltun/config.example.toml"
         )

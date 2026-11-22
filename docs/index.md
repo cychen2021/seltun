@@ -7,3 +7,4 @@ File names are in `snake_case.md`. Each page is in this index. Add a row for eac
 | Page | Contents |
 | --- | --- |
 | [daemon.md](daemon.md) | `seltund`: the design, the data path, the control channel, the switch state, elevation, autostart and limits |
+| [macos.md](macos.md) | macOS: the differences in the data path, root and autostart with launchd, and the stable code signature |

@@ -1,7 +1,7 @@
 [project]
 name = "seltun"
 version = "0.1.0"
-description = "Steer selected Windows processes into a TUN adapter and forward them to a local proxy"
+description = "Steer selected Windows or macOS processes into a TUN adapter and forward them to a local proxy"
 readme = "README.md"
 authors = [
     { name = "Chuyang Chen", email = "chuyangchen2018@outlook.com" }

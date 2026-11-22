@@ -30,6 +30,10 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Shell::IsUserAnAdmin;
 
 use super::Proto;
+use crate::matcher::Matcher;
+
+/// The instruction that the daemon shows when it is not elevated.
+pub const ELEVATION_HINT: &str = "To create the TUN adapter, the daemon must run with administrator rights. Run `seltun autostart enable` one time in an elevated terminal. Then run `seltun daemon start`.";
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const IP_UNICAST_IF: i32 = 31;
@@ -253,6 +257,18 @@ impl Owners {
             });
         }
         None
+    }
+
+    /// The executable of the process that owns the socket `local`, if `matcher` selects that process. For TCP, the lookup also uses `remote`.
+    pub fn selected(
+        &self,
+        proto: Proto,
+        local: SocketAddr,
+        remote: Option<SocketAddr>,
+        matcher: &Matcher,
+    ) -> Option<String> {
+        self.image(proto, local, remote)
+            .filter(|image| matcher.matches(image))
     }
 }
 

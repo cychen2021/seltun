@@ -1,9 +1,13 @@
-//! Stand-ins for systems other than Windows. The daemon works on Windows only. The stand-ins let the rest of the code compile and test.
+//! Stand-ins for systems other than Windows and macOS. The daemon works on Windows and macOS only. The stand-ins let the rest of the code compile and test.
 
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, SocketAddr};
 
 use super::Proto;
+use crate::matcher::Matcher;
+
+/// The instruction that the daemon shows when it cannot create the TUN adapter.
+pub const ELEVATION_HINT: &str = "seltund works on Windows and macOS only.";
 
 /// Do nothing. Only Windows has a console that the daemon must attach to.
 pub fn attach_parent_console() {}
@@ -16,11 +20,12 @@ pub fn is_elevated() -> bool {
 pub struct Owners {}
 
 impl Owners {
-    pub fn image(
+    pub fn selected(
         &self,
         _proto: Proto,
         _local: SocketAddr,
         _remote: Option<SocketAddr>,
+        _matcher: &Matcher,
     ) -> Option<String> {
         None
     }
@@ -37,7 +42,7 @@ pub fn dns_servers(_index: u32) -> Vec<IpAddr> {
 pub fn set_dns_servers(_index: u32, _servers: &[IpAddr]) -> Result<()> {
     Err(Error::new(
         ErrorKind::Unsupported,
-        "seltund works on Windows only.",
+        "seltund works on Windows and macOS only.",
     ))
 }
 
@@ -52,7 +57,7 @@ impl Routes {
     pub fn install(_tun_index: u32) -> Result<Self> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "seltund works on Windows only.",
+            "seltund works on Windows and macOS only.",
         ))
     }
 }

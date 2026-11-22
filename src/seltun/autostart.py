@@ -1,10 +1,10 @@
 """Start the daemon at login with administrator rights.
 
-The daemon needs administrator rights to create the Wintun adapter and its routes. A Run-key entry cannot get these rights without a UAC prompt at each login. Thus autostart is a Task Scheduler task. At the logon of the user, it starts ``seltund.exe`` with the highest privileges and shows no prompt.
+The daemon needs administrator rights (root on macOS) to create the TUN adapter and its routes.
 
-To create or remove the task, use an elevated terminal one time. To start, stop, or query the task, you do not need an elevated terminal.
+On Windows, a Run-key entry cannot get these rights without a UAC prompt at each login. Thus autostart is a Task Scheduler task. At the logon of the user, it starts ``seltund.exe`` with the highest privileges and shows no prompt. To create or remove the task, use an elevated terminal one time. To start, stop, or query the task, you do not need an elevated terminal. The name of the task is :data:`NAME`.
 
-The name of the task is :data:`NAME`.
+On macOS, autostart is a launchd daemon (:data:`LAUNCHD_PLIST`). It starts ``seltund`` as root when the computer starts. A sudoers rule (:data:`SUDOERS_FILE`) lets the user start the daemon with no password. To create or remove them, ``sudo`` asks for the password one time.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from __future__ import annotations
 import ctypes
 import getpass
 import os
+import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -21,20 +23,38 @@ from xml.sax.saxutils import escape
 from .support.errors import SeltunError
 
 __all__ = [
+    "ELEVATION_HINT",
+    "LAUNCHD_LABEL",
+    "LAUNCHD_PLIST",
     "NAME",
+    "SUDOERS_FILE",
     "disable",
     "enable",
     "end",
     "is_admin",
     "registered",
     "run",
+    "launchd_plist",
+    "sudoers_rule",
     "task_xml",
 ]
 
 NAME = "seltund"
+LAUNCHD_LABEL = "io.github.cychen2021.seltund"
+LAUNCHD_PLIST = Path("/Library/LaunchDaemons") / f"{LAUNCHD_LABEL}.plist"
+SUDOERS_FILE = Path("/etc/sudoers.d/seltund")
+_LAUNCHCTL = "/bin/launchctl"
+_SERVICE = f"system/{LAUNCHD_LABEL}"
+
+if sys.platform == "darwin":
+    ELEVATION_HINT = "The daemon does not run as root. It cannot create the TUN adapter. Run `seltun autostart enable` one time. After that, `seltun daemon start` starts the daemon as root with no password."
+else:
+    ELEVATION_HINT = "This terminal is not elevated. The daemon cannot create the TUN adapter. Run `seltun autostart enable` one time in an elevated terminal. After that, `seltun daemon start` starts the daemon with administrator rights."
 
 
 def is_admin() -> bool:
+    if sys.platform == "darwin":
+        return os.geteuid() == 0
     if sys.platform != "win32":
         return False
     return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
@@ -42,7 +62,7 @@ def is_admin() -> bool:
 
 def _schtasks(*args: str) -> subprocess.CompletedProcess[str]:
     if sys.platform != "win32":
-        raise SeltunError("Autostart works on Windows only.")
+        raise SeltunError("Autostart works on Windows and macOS only.")
     return subprocess.run(
         ["schtasks", *args],
         capture_output=True,
@@ -77,7 +97,7 @@ def task_xml(user: str, argv: list[str]) -> str:
 """
 
 
-def enable(argv: list[str]) -> str:
+def _enable_windows(argv: list[str]) -> str:
     """Register the logon task for ``argv``. The code replaces an existing task. Return the command line that the task runs."""
     if not is_admin():
         raise SeltunError("To create the autostart task, use an elevated terminal.")
@@ -92,7 +112,7 @@ def enable(argv: list[str]) -> str:
     return subprocess.list2cmdline(argv)
 
 
-def disable() -> bool:
+def _disable_windows() -> bool:
     """Remove the task. Return true if there was a task."""
     if registered() is None:
         return False
@@ -104,10 +124,8 @@ def disable() -> bool:
     return True
 
 
-def registered() -> str | None:
-    """The command line that the task runs, or ``None`` if there is no task. On other systems there is no task."""
-    if sys.platform != "win32":
-        return None
+def _registered_windows() -> str | None:
+    """The command line that the task runs, or ``None`` if there is no task."""
     result = _schtasks("/Query", "/TN", NAME, "/XML")
     if result.returncode != 0:
         return None
@@ -123,13 +141,148 @@ def registered() -> str | None:
     return f"{command} {arguments}".strip()
 
 
-def run() -> None:
+def _run_windows() -> None:
     """Start the task with administrator rights. No prompt shows."""
     result = _schtasks("/Run", "/TN", NAME)
     if result.returncode != 0:
         raise _failure(result)
 
 
-def end() -> None:
+def _end_windows() -> None:
     """Stop the instance of the task that runs."""
     _schtasks("/End", "/TN", NAME)
+
+
+def launchd_plist(argv: list[str]) -> bytes:
+    """The launchd daemon definition. launchd starts ``argv`` as root when the computer starts. It starts the daemon again if the daemon fails, but not after a stop with ``seltun daemon stop``."""
+    return plistlib.dumps(
+        {
+            "Label": LAUNCHD_LABEL,
+            "ProgramArguments": argv,
+            "RunAtLoad": True,
+            "KeepAlive": {"SuccessfulExit": False},
+            "ProcessType": "Background",
+        }
+    )
+
+
+def sudoers_rule(user: str) -> str:
+    """The sudoers rule that lets ``user`` start (and restart) the launchd daemon with no password. The rule permits only these two exact commands."""
+    return (
+        f"{user} ALL=(root) NOPASSWD: {_LAUNCHCTL} kickstart {_SERVICE}, "
+        f"{_LAUNCHCTL} kickstart -k {_SERVICE}\n"
+    )
+
+
+def _sudo(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run a command as root. ``sudo`` asks for the password in the terminal if it must."""
+    return subprocess.run(["sudo", *args], capture_output=True, text=True)
+
+
+def _check(result: subprocess.CompletedProcess[str], what: str) -> None:
+    if result.returncode != 0:
+        raise SeltunError(f"{what}: {(result.stderr or result.stdout).strip()}")
+
+
+def _enable_macos(argv: list[str]) -> str:
+    user = getpass.getuser()
+    with tempfile.TemporaryDirectory() as tmp:
+        plist = Path(tmp) / "daemon.plist"
+        plist.write_bytes(launchd_plist(argv))
+        sudoers = Path(tmp) / "sudoers"
+        sudoers.write_text(sudoers_rule(user), encoding="utf-8")
+        _check(_sudo("/usr/sbin/visudo", "-cf", str(sudoers)), "visudo")
+        _check(
+            _sudo(
+                "/usr/bin/install",
+                "-m",
+                "440",
+                "-o",
+                "root",
+                "-g",
+                "wheel",
+                str(sudoers),
+                str(SUDOERS_FILE),
+            ),
+            "install",
+        )
+        # Remove the old daemon definition first. launchd does not read a changed file of a loaded daemon.
+        _sudo(_LAUNCHCTL, "bootout", _SERVICE)
+        _check(
+            _sudo(
+                "/usr/bin/install",
+                "-m",
+                "644",
+                "-o",
+                "root",
+                "-g",
+                "wheel",
+                str(plist),
+                str(LAUNCHD_PLIST),
+            ),
+            "install",
+        )
+        _check(
+            _sudo(_LAUNCHCTL, "bootstrap", "system", str(LAUNCHD_PLIST)),
+            "launchctl bootstrap",
+        )
+    return shlex.join(argv)
+
+
+def _disable_macos() -> bool:
+    if not LAUNCHD_PLIST.exists():
+        return False
+    _sudo(_LAUNCHCTL, "bootout", _SERVICE)
+    _check(_sudo("/bin/rm", "-f", str(LAUNCHD_PLIST), str(SUDOERS_FILE)), "rm")
+    return True
+
+
+def _registered_macos() -> str | None:
+    try:
+        with LAUNCHD_PLIST.open("rb") as file:
+            definition = plistlib.load(file)
+    except FileNotFoundError:
+        return None
+    except OSError, plistlib.InvalidFileException:
+        return ""
+    return shlex.join(definition.get("ProgramArguments", []))
+
+
+def _run_macos() -> None:
+    # The sudoers rule permits this command with no password. If the rule is missing, sudo asks for the password.
+    _check(_sudo(_LAUNCHCTL, "kickstart", _SERVICE), "launchctl kickstart")
+
+
+def _end_macos() -> None:
+    _sudo(_LAUNCHCTL, "kill", "TERM", _SERVICE)
+
+
+def enable(argv: list[str]) -> str:
+    """Register the autostart entry for ``argv``. The code replaces an existing entry. Return the command line that the entry runs. On macOS, the daemon also starts immediately."""
+    return _enable_macos(argv) if sys.platform == "darwin" else _enable_windows(argv)
+
+
+def disable() -> bool:
+    """Remove the autostart entry. Return true if there was an entry."""
+    return _disable_macos() if sys.platform == "darwin" else _disable_windows()
+
+
+def registered() -> str | None:
+    """The command line that the autostart entry runs, or ``None`` if there is no entry."""
+    return _registered_macos() if sys.platform == "darwin" else _registered_windows()
+
+
+def run() -> None:
+    """Start the daemon with administrator rights. No prompt shows."""
+    if sys.platform == "darwin":
+        _run_macos()
+    else:
+        _run_windows()
+
+
+def end() -> None:
+    """Stop the instance of the daemon that the autostart entry started."""
+    if sys.platform == "darwin":
+        _end_macos()
+    else:
+        _end_windows()

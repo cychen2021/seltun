@@ -1,15 +1,20 @@
 //! The services that the daemon needs from the operating system: the owner of a socket, the physical interface, and the routes that send traffic into the TUN adapter.
 //!
-//! The code works on Windows only. On other systems, each function reports that it found nothing. Thus the pure logic builds and tests on each system.
+//! The code works on Windows and macOS. On other systems, each function reports that it found nothing. Thus the pure logic builds and tests on each system.
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
 pub use windows::*;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::*;
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod other;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub use other::*;
 
 use std::net::IpAddr;

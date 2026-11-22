@@ -1,7 +1,7 @@
-# Config for `seltun` and its daemon `seltund`. The command `seltun init` copies this template to the config path of the user (`%APPDATA%\seltun\config.toml` on Windows). Edit that copy. This file has no secrets. The switch state is in the data directory (`%LOCALAPPDATA%\seltun\state.json`).
+# Config for `seltun` and its daemon `seltund`. The command `seltun init` copies this template to the config path of the user (`%APPDATA%\seltun\config.toml` on Windows, `~/Library/Application Support/seltun/config.toml` on macOS). Edit that copy. This file has no secrets. The switch state is in the data directory (`%LOCALAPPDATA%\seltun\state.json` on Windows, next to the config file on macOS).
 
 [processes]
-# The processes to steer. Write the file name of the executable (`哔哩哔哩.exe`) or the full path (`C:\Program Files\bilibili\哔哩哔哩.exe`). Case does not matter. When seltun is on, all traffic goes through the daemon, but the daemon does not change the traffic of the other processes. seltun steers no process until you add a name to this list.
+# The processes to steer. Write the file name of the executable (`哔哩哔哩.exe`) or the full path (`C:\Program Files\bilibili\哔哩哔哩.exe`). On macOS, write the file name of the executable in the app bundle (`firefox`), not the name of the app. Case does not matter. When seltun is on, all traffic goes through the daemon, but the daemon does not change the traffic of the other processes. seltun steers no process until you add a name to this list.
 names = []
 
 [upstream]
@@ -13,7 +13,7 @@ protocol = "socks5"
 udp = false
 
 [tun]
-# The name and the address of the TUN adapter. The daemon creates the adapter when seltun is on. The address must not be in a network that you use. The range 198.19.0.0/16 is for tests of network devices and is not in use.
+# The name and the address of the TUN adapter. macOS gives the name of the adapter (`utunN`) and does not use `name`. The daemon creates the adapter when seltun is on. The address must not be in a network that you use. The range 198.19.0.0/16 is for tests of network devices and is not in use.
 name = "seltun"
 address = "198.19.0.1"
 mtu = 1500

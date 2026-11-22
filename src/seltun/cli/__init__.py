@@ -37,7 +37,7 @@ from ._errors import handle_errors
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 autostart_app = typer.Typer(
     no_args_is_help=True,
-    help="Start the daemon at login with an elevated Task Scheduler task.",
+    help="Start the daemon with administrator rights at login: a Task Scheduler task on Windows, a launchd daemon on macOS.",
 )
 app.add_typer(autostart_app, name="autostart")
 switch_app = typer.Typer(
@@ -119,7 +119,6 @@ def init(ctx: typer.Context) -> None:
                 "In [processes].names, write the processes to steer. Then run `seltun switch on`."
             )
         if sys.platform != "win32":
-            print_info("Wintun works on Windows only. seltun does not download it.")
             return
         target = daemon_.find_binary().parent
         if (target / "wintun.dll").is_file():
@@ -272,9 +271,7 @@ def daemon_start(ctx: typer.Context) -> None:
         argv = daemon_.command(c.config_path, c.state_path, paths.daemon_log())
         pid = daemon_.start_background(argv, c.control, paths.daemon_log())
         if not autostart_.is_admin():
-            print_warning(
-                "This terminal is not elevated. The daemon cannot create the TUN adapter. Run `seltun autostart enable` one time in an elevated terminal. After that, `seltun daemon start` starts the daemon with administrator rights."
-            )
+            print_warning(autostart_.ELEVATION_HINT)
     print_success(f"The daemon (pid {pid}) runs. The log is {paths.daemon_log()}")
 
 
@@ -293,7 +290,7 @@ def daemon_stop(ctx: typer.Context) -> None:
 
 @daemon_app.command("run")
 def daemon_run(ctx: typer.Context) -> None:
-    """Run the daemon in the foreground until you press Ctrl+C. To turn on, use an elevated terminal."""
+    """Run the daemon in the foreground until you press Ctrl+C. On Windows, use an elevated terminal to turn on. On macOS, sudo asks for the password."""
     c: Context = ctx.obj
     with handle_errors():
         argv = daemon_.command(c.config_path, c.state_path, None)
@@ -302,19 +299,27 @@ def daemon_run(ctx: typer.Context) -> None:
 
 @autostart_app.command("enable")
 def autostart_enable(ctx: typer.Context) -> None:
-    """Start the daemon at each login with administrator rights. Run this command one time in an elevated terminal."""
+    """Start the daemon at each login with administrator rights. On Windows, run this command one time in an elevated terminal. On macOS, sudo asks for the password one time."""
     c: Context = ctx.obj
     with handle_errors():
-        line = autostart_.enable(
-            daemon_.command(c.config_path, c.state_path, paths.daemon_log())
+        log = paths.daemon_log()
+        # The daemon runs as root on macOS. A log file that the user creates stays the property of the user.
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.touch(exist_ok=True)
+        line = autostart_.enable(daemon_.command(c.config_path, c.state_path, log))
+    if sys.platform == "darwin":
+        print_success(f"The daemon runs as root and starts with the computer: {line}")
+        print_info(
+            "To start the daemon again after `seltun daemon stop`, run `seltun daemon start`. No password is necessary."
         )
+        return
     print_success(f"The daemon starts at login: {line}")
     print_info("To start the daemon, run `seltun daemon start`.")
 
 
 @autostart_app.command("disable")
 def autostart_disable() -> None:
-    """Do not start the daemon at login. A daemon that runs does not stop."""
+    """Do not start the daemon at login. On Windows, a daemon that runs does not stop. On macOS, the daemon stops."""
     with handle_errors():
         removed = autostart_.disable()
     if removed:

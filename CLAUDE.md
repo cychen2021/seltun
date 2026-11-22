@@ -15,7 +15,7 @@ seltun has a CLI and a daemon, as a sibling CLI project has:
 
 The name of the daemon executable is intentional. Each connection from the daemon to the upstream proxy comes from the process `seltund.exe`. A rule of the proxy that matches the process name can match this name. See [docs/daemon.md](docs/daemon.md) for the data path and the reasons for the design. The design uses a Wintun adapter with half-default routes. It does not use a WinDivert redirect, because Defender puts WinDivert in quarantine.
 
-The project works on Windows only (Wintun, IP Helper, Task Scheduler). The pure Rust modules and the Python layer build and test on each system.
+The project works on Windows (Wintun, IP Helper, Task Scheduler) and on macOS (utun, libproc, launchd). See [docs/macos.md](docs/macos.md) for the differences. The pure Rust modules and the Python layer build and test on each system.
 
 ## Toolchain and commands
 
@@ -30,7 +30,7 @@ The project uses **uv** (not pip or poetry) and **Python 3.14**. The daemon in `
 
 **After a large code change, run `format.py` and then `type_check.py`.** Do this before you commit. There is no CI. These scripts are the authoritative gate.
 
-A real run of the daemon needs an **elevated** terminal, because of the Wintun adapter and the routes. Run `seltun daemon run` in the foreground. Or run `seltun autostart enable` one time. After this step, `seltun daemon start` works from each terminal.
+A real run of the daemon needs an **elevated** terminal on Windows and root on macOS, because of the TUN adapter and the routes. Run `seltun daemon run` in the foreground (on macOS, it uses `sudo`). Or run `seltun autostart enable` one time. After this step, `seltun daemon start` works from each terminal. On macOS, install with `scripts/install-mac.sh`. It signs the daemon with a stable certificate (see [docs/macos.md](docs/macos.md)).
 
 ## Repo layout
 
@@ -43,11 +43,12 @@ src/seltun/
   paths.py               # per-user locations of config, data and log
   control.py             # client of the control channel of the daemon
   daemon.py              # finds and starts seltund
-  autostart.py           # elevated Task Scheduler logon task
+  autostart.py           # elevated Task Scheduler logon task (Windows), launchd daemon and sudoers rule (macOS)
   drivers.py             # pinned download of wintun.dll
   cli/                   # Typer commands (thin layer)
   support/               # console output (loguru) and error types
-native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of the upstream proxy), forward (data path), daemon (reconcile), control, platform (Windows code)
+native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of the upstream proxy), forward (data path), daemon (reconcile), control, platform (Windows and macOS code)
+scripts/install-mac.sh   # macOS install: creates the signing certificate, installs, signs the daemon
 tests/                   # pytest
 config.example.toml      # template with comments; `seltun init` copies it (the wheel contains it)
 hatch_build.py           # build hook: compiles the daemon, downloads Wintun, adds the template to the wheel

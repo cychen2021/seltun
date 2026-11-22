@@ -2,6 +2,7 @@
 
 import json
 import socketserver
+import sys
 import threading
 
 import pytest
@@ -213,6 +214,24 @@ def test_task_xml_is_elevated_logon_task_with_quoted_arguments():
     assert r'--config "C:\a b\c.toml"' in xml
 
 
+def test_launchd_plist_runs_the_daemon_at_load_and_after_a_failure():
+    import plistlib
+
+    argv = ["/Users/me/seltund", "--config", "/Users/me/a b/c.toml"]
+    definition = plistlib.loads(autostart.launchd_plist(argv))
+    assert definition["Label"] == autostart.LAUNCHD_LABEL
+    assert definition["ProgramArguments"] == argv
+    assert definition["RunAtLoad"] is True
+    assert definition["KeepAlive"] == {"SuccessfulExit": False}
+
+
+def test_sudoers_rule_permits_only_the_start_of_the_daemon():
+    rule = autostart.sudoers_rule("me")
+    assert rule.startswith("me ALL=(root) NOPASSWD: /bin/launchctl kickstart system/")
+    assert rule.count("/bin/launchctl") == 2 and rule.endswith("\n")
+    assert "ALL=(ALL)" not in rule and rule.count(":") == 1
+
+
 def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeypatch):
     from seltun import daemon as daemon_
     from seltun.cli import ensure_wintun as _  # noqa: F401  (the name the command uses)
@@ -235,13 +254,15 @@ def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeyp
     assert not config.exists()
     result = invoke("init")
     assert result.exit_code == 0, result.output
-    assert config.exists() and fetched == [binary.parent]
+    # Only Windows needs wintun.dll.
+    expected = [binary.parent] if sys.platform == "win32" else []
+    assert config.exists() and fetched == expected
 
     config.write_text("# mine", encoding="utf-8")
     result = invoke("init")
     assert result.exit_code == 0 and "is already there" in result.output
     assert config.read_text(encoding="utf-8") == "# mine"
-    assert fetched == [binary.parent]
+    assert fetched == expected
 
 
 def test_init_skips_wintun_off_windows(env, tmp_path, monkeypatch):

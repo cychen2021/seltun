@@ -55,12 +55,12 @@ impl Context {
     /// Proxy a flow only if the process that owns its source socket is selected. If the daemon does not find the owner, the flow goes direct.
     pub fn verdict(&self, proto: Proto, src: SocketAddr, dst: SocketAddr) -> Verdict {
         let remote = (proto == Proto::Tcp).then_some(dst);
-        match self.owners.image(proto, src, remote) {
-            Some(image) if self.matcher.matches(&image) => {
+        match self.owners.selected(proto, src, remote, &self.matcher) {
+            Some(image) => {
                 tracing::debug!(%image, %src, %dst, ?proto, "proxy");
                 Verdict::Proxy
             },
-            _ => Verdict::Direct,
+            None => Verdict::Direct,
         }
     }
 
