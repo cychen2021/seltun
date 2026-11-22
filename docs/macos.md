@@ -22,6 +22,8 @@ The code is in `native/daemon/src/platform/macos.rs` and in `create_device` in `
 
 **What the upstream proxy sees.** The proxy sees all forwarded traffic as traffic of the process `seltund`.
 
+**Open files.** launchd starts a process with a soft limit of 256 open files. When seltun is on, all IPv4 traffic of the computer goes through the daemon, and each direct flow holds a socket. With 256 files, the daemon soon cannot open more sockets, and each new connection of the computer fails (`Too many open files`). Thus the daemon raises its soft limit to 65536 when it starts, or to a smaller value if macOS refuses it. The log shows the limit. Also, a DNS flow (UDP port 53) closes after 10 seconds without data, not after 60 seconds as other UDP flows.
+
 ## Root and autostart
 
 The creation of the utun interface and the routes needs root. `seltun autostart enable` asks for the password of the user one time (with `sudo`). It installs these two files:

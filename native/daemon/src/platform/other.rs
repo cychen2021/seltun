@@ -12,6 +12,10 @@ pub const ELEVATION_HINT: &str = "seltund works on Windows and macOS only.";
 /// Do nothing. Only Windows has a console that the daemon must attach to.
 pub fn attach_parent_console() {}
 
+pub fn raise_open_file_limit() -> Option<u64> {
+    None
+}
+
 pub fn is_elevated() -> bool {
     false
 }

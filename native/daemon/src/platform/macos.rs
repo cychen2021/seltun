@@ -33,6 +33,36 @@ pub fn is_elevated() -> bool {
 /// Do nothing. Only Windows has a console that the daemon must attach to.
 pub fn attach_parent_console() {}
 
+/// The open files that the daemon asks for. When seltun is on, all IPv4 traffic of the computer goes through the daemon, and each direct flow holds a socket.
+const OPEN_FILES: libc::rlim_t = 65536;
+
+/// Raise the soft limit of open files of this process, and return the new limit. launchd starts a process with a soft limit of 256 open files. With this limit, the daemon soon cannot open more sockets, and each new connection of the computer fails. macOS refuses a value above `kern.maxfilesperproc`, thus the function tries smaller values too.
+pub fn raise_open_file_limit() -> Option<u64> {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `limit` is valid during the call.
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+        return None;
+    }
+    for wanted in [OPEN_FILES, 24576, 10240] {
+        let value = wanted.min(limit.rlim_max);
+        if value <= limit.rlim_cur {
+            break;
+        }
+        let new = libc::rlimit {
+            rlim_cur: value,
+            rlim_max: limit.rlim_max,
+        };
+        // SAFETY: `new` is valid during the call.
+        if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &new) } == 0 {
+            return Some(value);
+        }
+    }
+    Some(limit.rlim_cur)
+}
+
 /// A socket: `(protocol, local address, local port, remote address, remote port)`.
 type Row = (Proto, Ipv4Addr, u16, Ipv4Addr, u16);
 
@@ -466,6 +496,11 @@ mod tests {
         if let Some(index) = physical_interface(u32::MAX) {
             assert!(if_name(index).is_ok());
         }
+    }
+
+    #[test]
+    fn open_file_limit_is_raised() {
+        assert!(raise_open_file_limit().unwrap() >= 10240);
     }
 
     #[test]

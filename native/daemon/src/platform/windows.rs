@@ -44,6 +44,11 @@ pub fn is_elevated() -> bool {
     unsafe { IsUserAnAdmin() != 0 }
 }
 
+/// Do nothing. Windows has no small default limit of open sockets.
+pub fn raise_open_file_limit() -> Option<u64> {
+    None
+}
+
 /// Connect the standard output and the standard error of this process to the console of the parent process.
 ///
 /// `seltund.exe` is a program of the Windows subsystem. Thus it has no console window of its own, and Task Scheduler does not open a window for it. For a foreground run in a terminal, this function gives the daemon the output to that terminal. Ctrl+C then also reaches the daemon. If the parent has no console, or the output is redirected, the call does nothing.

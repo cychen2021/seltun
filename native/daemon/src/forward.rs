@@ -20,6 +20,13 @@ use crate::socks::{self, UdpAssociation};
 
 /// The time that a flow can be idle before the daemon closes it.
 const UDP_IDLE: Duration = Duration::from_secs(60);
+/// The idle time of a DNS flow (UDP port 53). A DNS query gets its answer in a few seconds, and each flow holds a socket. A long idle time with many queries uses many file descriptors.
+const DNS_IDLE: Duration = Duration::from_secs(10);
+
+/// The time that a UDP flow to `dst` can be idle before the daemon closes it.
+fn udp_idle(dst: SocketAddr) -> Duration {
+    if dst.port() == 53 { DNS_IDLE } else { UDP_IDLE }
+}
 /// The time that the daemon keeps the physical interface before it looks for it again.
 const IFACE_TTL: Duration = Duration::from_secs(2);
 
@@ -211,9 +218,9 @@ where
         return;
     }
     let result = if through_proxy {
-        relay_udp_via_proxy(&mut flow, dst, &ctx).await
+        relay_udp_via_proxy(&mut flow, dst, &ctx, udp_idle(dst)).await
     } else {
-        relay_udp_direct(&mut flow, dst, &ctx).await
+        relay_udp_direct(&mut flow, dst, &ctx, udp_idle(dst)).await
     };
     if let Err(error) = result {
         tracing::debug!(%dst, "UDP flow ended: {error}");
@@ -221,7 +228,12 @@ where
     let _ = flow.shutdown().await;
 }
 
-async fn relay_udp_direct<S>(flow: &mut S, dst: SocketAddr, ctx: &Context) -> IoResult<()>
+async fn relay_udp_direct<S>(
+    flow: &mut S,
+    dst: SocketAddr,
+    ctx: &Context,
+    idle: Duration,
+) -> IoResult<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -240,12 +252,17 @@ where
                 let n = n?;
                 flow.write_all(&down[..n]).await?;
             }
-            _ = tokio::time::sleep(UDP_IDLE) => return Ok(()),
+            _ = tokio::time::sleep(idle) => return Ok(()),
         }
     }
 }
 
-async fn relay_udp_via_proxy<S>(flow: &mut S, dst: SocketAddr, ctx: &Context) -> IoResult<()>
+async fn relay_udp_via_proxy<S>(
+    flow: &mut S,
+    dst: SocketAddr,
+    ctx: &Context,
+    idle: Duration,
+) -> IoResult<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -262,7 +279,7 @@ where
                 let (_source, n) = got?;
                 flow.write_all(&down[..n]).await?;
             }
-            _ = tokio::time::sleep(UDP_IDLE) => return Ok(()),
+            _ = tokio::time::sleep(idle) => return Ok(()),
         }
     }
 }
@@ -342,6 +359,12 @@ mod tests {
             "1.1.1.1:80".parse().unwrap(),
         );
         assert_eq!(v, Verdict::Direct);
+    }
+
+    #[test]
+    fn dns_flows_have_a_short_idle_time() {
+        assert_eq!(udp_idle("8.8.8.8:53".parse().unwrap()), DNS_IDLE);
+        assert_eq!(udp_idle("8.8.8.8:443".parse().unwrap()), UDP_IDLE);
     }
 
     #[test]

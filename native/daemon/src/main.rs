@@ -49,6 +49,9 @@ async fn main() -> Result<()> {
     }
     let cli = Cli::parse();
     init_logging(&cli)?;
+    if let Some(limit) = seltund::platform::raise_open_file_limit() {
+        tracing::info!(limit, "The limit of open files.");
+    }
 
     let settings = Settings::load(&cli.config)?;
     let listener = TcpListener::bind(settings.control).await.with_context(|| {
