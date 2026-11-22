@@ -186,15 +186,91 @@ fn if_name(index: u32) -> Result<String> {
         .into_owned())
 }
 
-/// The name of the primary interface in the text that `scutil` shows for `State:/Network/Global/IPv4`.
-fn primary_from_scutil(text: &str) -> Option<&str> {
+/// The value of `key` in the text that `scutil` shows for a dictionary, for example `PrimaryInterface` or `Router` of `State:/Network/Global/IPv4`.
+fn scutil_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     text.lines().find_map(|line| {
-        let (key, value) = line.split_once(':')?;
-        (key.trim() == "PrimaryInterface").then(|| value.trim())
+        let (k, value) = line.split_once(':')?;
+        (k.trim() == key).then(|| value.trim())
     })
 }
 
-/// The index of the physical interface: the primary IPv4 interface of the system configuration, if it is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. The TUN routes do not change the primary interface, because the utun interface is not a network service. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect.
+/// A scoped default route of the primary interface (`route add default <router> -ifscope <interface>`).
+///
+/// A socket that `IP_BOUND_IF` pins to the primary interface does not find the default route of that interface. macOS keeps that route unscoped, and a scoped lookup for the primary interface then uses the global table. In the global table, the half-default routes of the TUN are the best match, but their interface is not the pinned one. Thus the lookup fails, and each direct connection fails. With this route, the scoped lookup finds a route of its own. macOS gives a scoped default route only to the interfaces that are not primary.
+struct ScopedDefault {
+    interface: String,
+    router: Option<String>,
+    /// True if the daemon added the route. The daemon removes only its own route.
+    added: bool,
+}
+
+static SCOPED_DEFAULT: Mutex<Option<ScopedDefault>> = Mutex::new(None);
+
+fn scoped_default_args<'a>(
+    action: &'a str,
+    interface: &'a str,
+    router: Option<&'a str>,
+) -> Vec<&'a str> {
+    let mut args = vec![action, "-ifscope", interface, "default"];
+    match router {
+        Some(router) => args.push(router),
+        None => args.extend(["-interface", interface]),
+    }
+    args
+}
+
+/// Make sure that the primary interface has a scoped default route. If the primary interface or its router changed, remove the old route of the daemon first.
+fn ensure_scoped_default(interface: &str, router: Option<&str>) {
+    let mut current = SCOPED_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(old) = current.as_ref() {
+        if old.interface == interface && old.router.as_deref() == router {
+            return;
+        }
+        if old.added {
+            let _ = route(&scoped_default_args(
+                "delete",
+                &old.interface,
+                old.router.as_deref(),
+            ));
+        }
+    }
+    let added = match route(&scoped_default_args("add", interface, router)) {
+        Ok(()) => {
+            tracing::info!(
+                interface,
+                ?router,
+                "Added a scoped default route for the direct traffic."
+            );
+            true
+        },
+        // The route can already be there, for example from another program.
+        Err(error) => {
+            tracing::debug!("{error}");
+            false
+        },
+    };
+    *current = Some(ScopedDefault {
+        interface: interface.to_owned(),
+        router: router.map(str::to_owned),
+        added,
+    });
+}
+
+/// Remove the scoped default route that the daemon added, if there is one.
+fn remove_scoped_default() {
+    let mut current = SCOPED_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(old) = current.take()
+        && old.added
+    {
+        let _ = route(&scoped_default_args(
+            "delete",
+            &old.interface,
+            old.router.as_deref(),
+        ));
+    }
+}
+
+/// The index of the physical interface: the primary IPv4 interface of the system configuration, if it is not `exclude` (the TUN adapter). Traffic that must not enter the TUN leaves through this interface. The TUN routes do not change the primary interface, because the utun interface is not a network service. Each call finds the interface again, because Wi-Fi and Ethernet connect and disconnect. The call also gives the interface a scoped default route (see [`ScopedDefault`]).
 pub fn physical_interface(exclude: u32) -> Option<u32> {
     let mut child = Command::new("/usr/sbin/scutil")
         .stdin(Stdio::piped())
@@ -209,8 +285,16 @@ pub fn physical_interface(exclude: u32) -> Option<u32> {
         .ok()?;
     let output = child.wait_with_output().ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
-    let index = if_index(primary_from_scutil(&text)?)?;
-    (index != exclude).then_some(index)
+    let name = scutil_value(&text, "PrimaryInterface")?;
+    let index = if_index(name)?;
+    if index == exclude {
+        return None;
+    }
+    // Only root can add the route. The tests do not run as root and do not change the routes.
+    if is_elevated() {
+        ensure_scoped_default(name, scutil_value(&text, "Router"));
+    }
+    Some(index)
 }
 
 /// Pin `socket` to the interface with this index (`IP_BOUND_IF`). The traffic of the socket leaves through this interface, although the TUN routes cover all destinations.
@@ -246,7 +330,7 @@ fn route(args: &[&str]) -> Result<()> {
     }
 }
 
-/// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. The default route stays, and the scoped default route of the physical interface carries the sockets that the daemon pins to it. The routes go away with the interface. The code also removes them when the daemon stops.
+/// The two half-default routes (`0.0.0.0/1` and `128.0.0.0/1`). They send each destination that has no more specific route into the TUN adapter. LAN, loopback, and the subnet of the TUN have more specific routes. The default route stays, and a scoped default route of the physical interface carries the sockets that the daemon pins to it (see [`ScopedDefault`]). The routes go away with the interface. The code also removes them when the daemon stops.
 pub struct Routes {
     interface: String,
 }
@@ -272,6 +356,7 @@ impl Drop for Routes {
         for half in HALVES {
             let _ = route(&["delete", "-net", half, "-interface", &self.interface]);
         }
+        remove_scoped_default();
     }
 }
 
@@ -315,10 +400,23 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_primary_interface() {
+    fn reads_the_primary_interface_and_router() {
         let text = "<dictionary> {\n  PrimaryInterface : en0\n  PrimaryService : 1234\n  Router : 192.168.1.1\n}\n";
-        assert_eq!(primary_from_scutil(text), Some("en0"));
-        assert_eq!(primary_from_scutil("  No such key\n"), None);
+        assert_eq!(scutil_value(text, "PrimaryInterface"), Some("en0"));
+        assert_eq!(scutil_value(text, "Router"), Some("192.168.1.1"));
+        assert_eq!(scutil_value("  No such key\n", "Router"), None);
+    }
+
+    #[test]
+    fn scoped_default_uses_the_router_or_the_interface() {
+        assert_eq!(
+            scoped_default_args("add", "en0", Some("192.168.1.1")),
+            ["add", "-ifscope", "en0", "default", "192.168.1.1"]
+        );
+        assert_eq!(
+            scoped_default_args("delete", "en7", None),
+            ["delete", "-ifscope", "en7", "default", "-interface", "en7"]
+        );
     }
 
     #[test]
