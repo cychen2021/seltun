@@ -6,8 +6,6 @@ When seltun is on, a daemon creates a Wintun adapter. The daemon sends the traff
 
 A CLI sets the switch to on or off. The switch keeps its state when the computer starts again.
 
-> **For the owner only.** Do not give this tool to other persons.
-
 The tool works on Windows only. See [docs/daemon.md](docs/daemon.md) for more information.
 
 ## Install

@@ -4,8 +4,6 @@ This file gives guidance to Claude Code (claude.ai/code) for work in this reposi
 
 The file has only the information that applies to each task. The pages in `docs/` have the information for one part of the project. [docs/index.md](docs/index.md) lists them. Read the page for the part that you change. Do not find the information again.
 
-> **For the owner only.** Do not push this project to a public remote. Do not publish it as a package. Do not give it to other persons.
-
 ## Project purpose
 
 seltun is a TUN adapter for selected processes only. A system-wide TUN adapter captures the whole computer. seltun creates a Wintun adapter and steers only the **selected processes** into it. Then it forwards the flows to a local SOCKS5 or HTTP proxy (the upstream). All other traffic keeps its usual path.
