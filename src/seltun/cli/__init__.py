@@ -106,7 +106,7 @@ def _root(
 
 @app.command()
 def init(ctx: typer.Context) -> None:
-    """Create the config file if it is missing. Download wintun.dll next to the daemon if it is missing. You can run this command again with no risk."""
+    """Create the config file if it is missing. On Windows, download wintun.dll next to the daemon if it is missing. You can run this command again with no risk."""
     c: Context = ctx.obj
     with handle_errors():
         if c.config_path.exists():
@@ -118,6 +118,9 @@ def init(ctx: typer.Context) -> None:
             print_info(
                 "In [processes].names, write the processes to steer. Then run `seltun switch on`."
             )
+        if sys.platform != "win32":
+            print_info("Wintun works on Windows only. seltun does not download it.")
+            return
         target = daemon_.find_binary().parent
         if (target / "wintun.dll").is_file():
             print_info(f"{target / 'wintun.dll'} is already there. No change.")

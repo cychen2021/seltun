@@ -105,7 +105,9 @@ def disable() -> bool:
 
 
 def registered() -> str | None:
-    """The command line that the task runs, or ``None`` if there is no task."""
+    """The command line that the task runs, or ``None`` if there is no task. On other systems there is no task."""
+    if sys.platform != "win32":
+        return None
     result = _schtasks("/Query", "/TN", NAME, "/XML")
     if result.returncode != 0:
         return None

@@ -15,6 +15,7 @@ from seltun.state import State
 from seltun.support.errors import DaemonNotRunning, SeltunError
 
 runner = CliRunner()
+real_registered = autostart.registered
 
 
 @pytest.fixture(autouse=True)
@@ -229,6 +230,7 @@ def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeyp
         return directory / "wintun.dll"
 
     monkeypatch.setattr("seltun.cli.ensure_wintun", fake_fetch)
+    monkeypatch.setattr("seltun.cli.sys.platform", "win32")
     config = tmp_path / "config.toml"
     assert not config.exists()
     result = invoke("init")
@@ -242,6 +244,18 @@ def test_init_creates_config_and_wintun_only_when_missing(env, tmp_path, monkeyp
     assert fetched == [binary.parent]
 
 
+def test_init_skips_wintun_off_windows(env, tmp_path, monkeypatch):
+    _, _, invoke = env
+    monkeypatch.setattr("seltun.cli.sys.platform", "darwin")
+    monkeypatch.setattr(
+        "seltun.cli.ensure_wintun", lambda *a, **k: pytest.fail("download off Windows")
+    )
+    result = invoke("init")
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "config.toml").exists()
+    assert "Windows only" in result.output
+
+
 def test_version_option(env):
     from seltun import __version__
 
@@ -250,3 +264,9 @@ def test_version_option(env):
     assert result.exit_code == 0
     assert result.output.strip() == f"seltun {__version__}"
     assert __version__ != "0.0.0+unknown"
+
+
+def test_registered_off_windows_is_none(monkeypatch):
+    """Off Windows there is no task. The query must not fail, because `daemon start` and `status` use it."""
+    monkeypatch.setattr(autostart.sys, "platform", "darwin")
+    assert real_registered() is None
