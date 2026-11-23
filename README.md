@@ -22,9 +22,9 @@ On macOS, use `scripts/install-mac.sh` instead. It installs seltun with `uv tool
 
 ## Use
 
-1. Run `seltun init`. It creates the config file if the file is missing. It downloads `wintun.dll` if the file is missing. `seltun paths` shows the location of the config file.
+1. Run `seltun init`. It creates the config file if the file is missing. On Windows, it downloads `wintun.dll` if the file is missing. `seltun paths` shows the location of the config file.
 2. In the config file, write the processes to steer in `[processes].names`. Use file names, for example `哔哩哔哩.exe`, or full paths.
-3. Open an elevated terminal and run `seltun autostart enable` one time. After this step, the daemon starts at each login with administrator rights. On macOS, use a usual terminal: `sudo` asks for your password one time. The daemon then runs as root and starts with the computer.
+3. On Windows, open an elevated terminal and run `seltun autostart enable` one time. After this step, the daemon starts at each login with administrator rights. On macOS, run the same command in a usual terminal: `sudo` asks for your password one time. The daemon then runs as root and starts with the computer.
 4. Run `seltun daemon start` to start the daemon. No UAC prompt and no password prompt shows.
 5. Run `seltun switch on` to steer the selected processes. Run `seltun switch off` to stop.
 
@@ -32,11 +32,11 @@ These commands are also available:
 
 | Command | Result |
 | --- | --- |
-| `seltun status` | Shows the switch, the daemon, the autostart task, and the problem if there is one. |
-| `seltun daemon run` | Runs the daemon in the foreground. Use an elevated terminal. On macOS, `sudo` asks for your password. |
+| `seltun status` | Shows the switch, the daemon, autostart, and the problem if there is one. |
+| `seltun daemon run` | Runs the daemon in the foreground. On Windows, use an elevated terminal. On macOS, `sudo` asks for your password. |
 | `seltun daemon stop` | Stops the daemon. The switch keeps its state. |
 | `seltun daemon reload` | Makes the daemon read the config file and the switch again. |
-| `seltun autostart disable` | Removes the autostart task. Use an elevated terminal. |
+| `seltun autostart disable` | Removes autostart. On Windows, use an elevated terminal. On macOS, `sudo` asks for your password, and the daemon stops. |
 | `seltun --version` | Shows the version. |
 
 The proxy sees all forwarded traffic as traffic of the process `seltund.exe` (`seltund` on macOS). The value of `[upstream].address` is the address of the proxy. The default value is 127.0.0.1:1080.

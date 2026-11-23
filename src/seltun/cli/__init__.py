@@ -205,7 +205,7 @@ def status(
     ctx: typer.Context,
     as_json: bool = typer.Option(False, "--json", help="Show machine-readable output."),
 ) -> None:
-    """Show the saved switch, the state of the daemon, and the autostart task."""
+    """Show the saved switch, the state of the daemon, and autostart."""
     c: Context = ctx.obj
     with handle_errors():
         persisted = State.load(c.state_path)
@@ -229,7 +229,7 @@ def status(
         typer.echo("daemon    not running (`seltun daemon start`)")
     else:
         typer.echo(
-            f"daemon    running, pid {daemon['pid']}{'' if daemon['elevated'] else ' (not elevated: cannot create the TUN adapter)'}"
+            f"daemon    running, pid {daemon['pid']}{'' if daemon['elevated'] else f' ({_NOT_ELEVATED}: cannot create the TUN adapter)'}"
         )
         typer.echo(f"steering  {'active' if daemon['active'] else 'inactive'}")
         typer.echo(f"upstream  {daemon['upstream']}")
@@ -241,7 +241,7 @@ def status(
 
 @daemon_app.command("start")
 def daemon_start(ctx: typer.Context) -> None:
-    """Start the daemon. If the autostart task is installed, the task starts the daemon with administrator rights."""
+    """Start the daemon. If autostart is installed, autostart starts the daemon with administrator rights (as root on macOS) and shows no prompt."""
     c: Context = ctx.obj
     with handle_errors():
         try:
@@ -261,12 +261,10 @@ def daemon_start(ctx: typer.Context) -> None:
                 except DaemonNotRunning:
                     if time.monotonic() > deadline:
                         raise SeltunError(
-                            f"The autostart task ran, but the daemon does not answer. See {paths.daemon_log()}."
+                            f"Autostart started the daemon, but the daemon does not answer. See {paths.daemon_log()}."
                         ) from None
                     time.sleep(0.3)
-            print_success(
-                f"The autostart task started the daemon. seltun is {_summary(status)}"
-            )
+            print_success(f"Autostart started the daemon. seltun is {_summary(status)}")
             return
         argv = daemon_.command(c.config_path, c.state_path, paths.daemon_log())
         pid = daemon_.start_background(argv, c.control, paths.daemon_log())
@@ -325,7 +323,10 @@ def autostart_disable() -> None:
     if removed:
         print_success("The daemon does not start at login.")
     else:
-        print_info("The autostart task was not installed.")
+        print_info("Autostart was not installed.")
+
+
+_NOT_ELEVATED = "not root" if sys.platform == "darwin" else "not elevated"
 
 
 def _autostart_summary(line: str | None) -> str:

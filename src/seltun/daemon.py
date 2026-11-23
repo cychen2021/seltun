@@ -79,7 +79,7 @@ def start_background(argv: list[str], control: tuple[str, int], log: Path) -> in
 
     The daemon gets its own process group. Thus the daemon continues when you close the terminal. On Windows, the daemon also leaves the job of this process, if the job permits it.
 
-    The daemon must be elevated to create the TUN adapter. In a terminal that is not elevated, the daemon runs but cannot turn on. ``seltun status`` shows the reason. The elevated way is the scheduled task of ``seltun autostart enable``.
+    The daemon must have administrator rights (root on macOS) to create the TUN adapter. Without them, the daemon runs but cannot turn on. ``seltun status`` shows the reason. ``seltun autostart enable`` installs the way to start the daemon with these rights: a scheduled task on Windows, a launchd daemon on macOS.
     """
     log.parent.mkdir(parents=True, exist_ok=True)
     options: dict = {
