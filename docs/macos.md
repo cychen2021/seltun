@@ -41,13 +41,13 @@ The launchd daemon runs the binary in the install directory of uv as root. A pro
 
 An ad-hoc signature identifies a binary by its hash. Each build then looks like a new program to macOS. Background items (System Settings > General > Login Items & Extensions) and each permission that macOS keeps for a program belong to the old build.
 
-Thus `scripts/install-mac.sh` signs the daemon with a stable self-signed certificate:
+Thus `scripts/install.py` signs the daemon with a stable self-signed certificate:
 
 1. On the first run, the script creates the certificate `seltun Code Signing` in the login keychain. The environment variable `SELTUN_CERT` changes the name.
 2. It runs `uv tool install` again. The build hook (`hatch_build.py`) signs the daemon with the certificate and the identifier `io.github.cychen2021.seltund`, if the certificate is in the keychain.
 3. It signs the installed daemon again, to be sure, and shows the designated requirement.
-4. If the launchd daemon is installed, the script restarts it with the new binary. The sudoers rule permits this command with no password.
+4. If the launchd daemon is installed, the script stops the daemon before the install and starts it again after the install (`seltun daemon stop` and `seltun daemon start`). The sudoers rule permits the start with no password.
 
-`scripts/install-mac.sh --no-install` only signs the daemon that is installed.
+`uv run scripts/install.py --no-install` only signs the daemon that is installed and restarts it.
 
 Only after the first signed build: if System Settings shows an old background item for `seltund`, remove it. The new build has a new identity one time. Later builds keep it.

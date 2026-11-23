@@ -13,12 +13,12 @@ The tool works on Windows and macOS. See [docs/daemon.md](docs/daemon.md) and [d
 Make sure that you have [uv](https://docs.astral.sh/uv/) and a Rust toolchain. The install compiles the daemon and downloads the pinned Wintun driver DLL.
 
 ```sh
-uv tool install path/to/seltun
+uv run path/to/seltun/scripts/install.py
 ```
 
-This command puts `seltun` on `PATH`. The package contains `seltund.exe` and `wintun.dll`.
+This command installs seltun with `uv tool install` and puts `seltun` on `PATH`. On Windows, the package contains `seltund.exe` and `wintun.dll`. If autostart is installed, the script stops the daemon before the install and starts it again after the install.
 
-On macOS, use `scripts/install-mac.sh` instead. It installs seltun with `uv tool install` and signs the daemon `seltund` with a self-signed certificate. The script creates the certificate in the login keychain on the first run. With a stable signature, macOS keeps the background item and the permissions of the daemon after each new build. See [docs/macos.md](docs/macos.md).
+On macOS, the script also signs the daemon `seltund` with a self-signed certificate. The script creates the certificate in the login keychain on the first run. With a stable signature, macOS keeps the background item and the permissions of the daemon after each new build. See [docs/macos.md](docs/macos.md).
 
 ## Use
 

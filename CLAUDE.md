@@ -22,7 +22,7 @@ The project works on Windows (Wintun, IP Helper, Task Scheduler) and on macOS (u
 The project uses **uv** (not pip or poetry) and **Python 3.14**. The daemon in `native/` is a Cargo workspace (edition 2024). `native/rust-toolchain.toml` pins the toolchain. Use the project interpreter (`uv run python`, `uv run pytest`), not a system `python`. Ruff formats the code to syntax that only Python 3.14 supports, for example the PEP 758 form `except A, B:` without parentheses. Do not add parentheses.
 
 - Install the dependencies: `uv sync`. This command installs the CLI in editable mode and does not build the daemon. `cargo build --release --manifest-path native/Cargo.toml` builds the daemon. `seltun` uses `native/target/release/` as a fallback. `seltun init` puts `wintun.dll` next to the daemon.
-- Install as a tool: `uv tool install --force .`. The `hatch_build.py` hook compiles the daemon. It also downloads the pinned Wintun into `seltun/bin/`.
+- Install as a tool: `uv run scripts/install.py`. It runs `uv tool install --force` and restarts the daemon if autostart is installed. The `hatch_build.py` hook compiles the daemon. On Windows, it also downloads the pinned Wintun into `seltun/bin/`. On macOS, it signs the daemon.
 - Run the CLI: `uv run seltun --help`.
 - Run the tests: `uv run pytest` and `cargo test --manifest-path native/Cargo.toml`. The tests never create the adapter, also in an elevated terminal.
 - Format: `uv run format.py`. It runs ruff, markdownlint-cli2 and `cargo fmt`. A step does not run if its tool is not available.
@@ -30,7 +30,7 @@ The project uses **uv** (not pip or poetry) and **Python 3.14**. The daemon in `
 
 **After a large code change, run `format.py` and then `type_check.py`.** Do this before you commit. There is no CI. These scripts are the authoritative gate.
 
-A real run of the daemon needs an **elevated** terminal on Windows and root on macOS, because of the TUN adapter and the routes. Run `seltun daemon run` in the foreground (on macOS, it uses `sudo`). Or run `seltun autostart enable` one time. After this step, `seltun daemon start` works from each terminal. On macOS, install with `scripts/install-mac.sh`. It signs the daemon with a stable certificate (see [docs/macos.md](docs/macos.md)).
+A real run of the daemon needs an **elevated** terminal on Windows and root on macOS, because of the TUN adapter and the routes. Run `seltun daemon run` in the foreground (on macOS, it uses `sudo`). Or run `seltun autostart enable` one time. After this step, `seltun daemon start` works from each terminal. Install with `uv run scripts/install.py`. On macOS, it also signs the daemon with a stable certificate (see [docs/macos.md](docs/macos.md)).
 
 ## Repo layout
 
@@ -48,7 +48,7 @@ src/seltun/
   cli/                   # Typer commands (thin layer)
   support/               # console output (loguru) and error types
 native/daemon/src/       # seltund (Rust): config, state, matcher, socks (client of the upstream proxy), forward (data path), daemon (reconcile), control, platform (Windows and macOS code)
-scripts/install-mac.sh   # macOS install: creates the signing certificate, installs, signs the daemon
+scripts/install.py       # install with uv tool install; on macOS also creates the signing certificate and signs the daemon; restarts the daemon if autostart is installed
 tests/                   # pytest
 config.example.toml      # template with comments; `seltun init` copies it (the wheel contains it)
 hatch_build.py           # build hook: compiles the daemon, downloads Wintun, adds the template to the wheel
