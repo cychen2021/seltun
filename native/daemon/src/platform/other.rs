@@ -13,7 +13,7 @@ pub fn is_elevated() -> bool {
 }
 
 #[derive(Default)]
-pub struct Owners;
+pub struct Owners {}
 
 impl Owners {
     pub fn image(

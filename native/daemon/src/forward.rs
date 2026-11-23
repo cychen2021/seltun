@@ -47,7 +47,7 @@ impl Context {
             upstream,
             matcher,
             tun_index,
-            owners: Owners,
+            owners: Owners::default(),
             interface: Mutex::new(None),
         }
     }
