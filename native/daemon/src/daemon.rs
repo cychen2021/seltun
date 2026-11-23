@@ -16,9 +16,9 @@ use crate::state::State;
 #[derive(Serialize, Debug, Clone)]
 pub struct Status {
     pub pid: u32,
-    /// The state that the user selected (the saved switch).
+    /// The state that the user selected (the saved switch). `seltun status` shows it as `switch`.
     pub enabled: bool,
-    /// True if the TUN adapter is up and the daemon forwards the flows.
+    /// True if the TUN adapter is up and the daemon forwards the flows. `seltun status` shows it as `steering`. Each `reload` tries to make it equal to `enabled`. See "Switch and steering" in `docs/daemon.md` for the conditions where the two are different.
     pub active: bool,
     /// The reason why the daemon is not in the selected state, if it is not.
     pub error: Option<String>,

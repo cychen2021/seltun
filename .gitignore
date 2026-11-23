@@ -33,3 +33,6 @@ config.toml
 !/.claude/settings.json
 *.swp
 .worktrees/
+
+# Standalone local repos kept for reference (not part of this repo)
+archive/

@@ -71,6 +71,26 @@ The command `reload` makes the daemon read the state and the config file again. 
 
 If the config file or the state file has an error, the daemon reports the error. It does not change the data path that is up. At startup, the daemon does one `reload`. Thus it comes back in the state that you selected.
 
+### Switch and steering
+
+`seltun status` shows two lines that look almost the same:
+
+- `switch` is the state that you selected. It is the value in `state.json` (`Status.enabled`). Only `seltun switch on` and `seltun switch off` change it. It stays the same when the daemon or the computer starts again.
+- `steering` is the state of the daemon now. It is active only when the TUN adapter, the routes and the data path are up (`Status.active`).
+
+At each `reload`, the daemon tries to make steering the same as the switch. The two values are different in these conditions:
+
+| switch | steering | Cause |
+| --- | --- | --- |
+| on | inactive | The daemon does not have administrator rights (root on macOS), thus it cannot create the TUN adapter. |
+| on | inactive | `[processes].names` is empty. |
+| on | inactive | The daemon cannot create the TUN adapter or the routes. |
+| on | inactive | The data path stopped after an error. The daemon does not start it again automatically. The next `reload` starts it again. |
+| off | active | The config file or the state file has an error at a `reload`. The daemon keeps the data path that is up (see above). |
+| off | active | A person or a program changed `state.json`, and no `reload` followed. |
+
+In all these conditions except the last one, `seltun status` shows the cause in the `problem` line. If the daemon does not run, `seltun status` shows only the switch.
+
 A request has no data. Thus the control channel can give the elevated daemon only one instruction: read your files again.
 
 The control port also prevents a second daemon. A second daemon cannot bind the port. A new value of `[daemon].control` applies after the daemon starts again.

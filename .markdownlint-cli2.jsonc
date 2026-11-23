@@ -13,6 +13,7 @@
   "ignores": [
     ".venv/**",
     ".claude/**",
+    "archive/**", // standalone local repos, see .gitignore
     "**/node_modules/**",
     "**/.pytest_cache/**",
     "x_*", // scratch / gitignored notes — not linted
