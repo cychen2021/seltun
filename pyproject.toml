@@ -6,6 +6,8 @@ readme = "README.md"
 authors = [
     { name = "Chuyang Chen", email = "chuyangchen2018@outlook.com" }
 ]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     # CLI framework. It is built on click, which uv also installs.
