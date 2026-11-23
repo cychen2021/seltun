@@ -26,7 +26,7 @@ The project uses **uv** (not pip or poetry) and **Python 3.14**. The daemon in `
 - Run the CLI: `uv run seltun --help`.
 - Run the tests: `uv run pytest` and `cargo test --manifest-path native/Cargo.toml`. The tests never create the adapter, also in an elevated terminal.
 - Format: `uv run format.py`. It runs ruff, markdownlint-cli2 and `cargo fmt`. A step does not run if its tool is not available.
-- Type-check: `uv run type_check.py`. It runs `uvx pyright` and then `cargo clippy -D warnings`.
+- Type-check: `uv run type_check.py`. It runs `uvx pyright` and then `cargo clippy -D warnings`. On macOS or Linux, it also runs clippy for the Windows target (`x86_64-pc-windows-msvc`) if rustup has it, because some code compiles only on Windows.
 
 **After a large code change, run `format.py` and then `type_check.py`.** Do this before you commit. There is no CI. These scripts are the authoritative gate.
 
