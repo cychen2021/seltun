@@ -23,7 +23,7 @@ On macOS, the script also signs the daemon `seltund` with a self-signed certific
 ## Use
 
 1. Run `seltun init`. It creates the config file if the file is missing. On Windows, it downloads `wintun.dll` if the file is missing. `seltun paths` shows the location of the config file.
-2. In the config file, write the processes to steer in `[processes].names`. Use file names, for example `哔哩哔哩.exe`, or full paths.
+2. In the config file, write the processes to steer in `[processes].names`. Use file names, for example `哔哩哔哩.exe`, full paths, or regular expressions that start with `re:`, for example `re:^chrome.*\.exe$`.
 3. On Windows, open an elevated terminal and run `seltun autostart enable` one time. After this step, the daemon starts at each login with administrator rights. On macOS, run the same command in a usual terminal: `sudo` asks for your password one time. The daemon then runs as root and starts with the computer.
 4. Run `seltun daemon start` to start the daemon. No UAC prompt and no password prompt shows.
 5. Run `seltun switch on` to steer the selected processes. Run `seltun switch off` to stop.

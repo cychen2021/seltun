@@ -142,6 +142,8 @@ impl Settings {
         if udp && protocol != Protocol::Socks5 {
             bail!("[upstream].udp = true needs protocol = \"socks5\".");
         }
+        let processes = file.processes.unwrap_or_default().names.unwrap_or_default();
+        crate::matcher::Matcher::new(&processes).context("Error in [processes].names")?;
         Ok(Self {
             upstream: Upstream {
                 address: parse_addr(
@@ -156,7 +158,7 @@ impl Settings {
                 address,
                 mtu: tun.mtu.unwrap_or(1500),
             },
-            processes: file.processes.unwrap_or_default().names.unwrap_or_default(),
+            processes,
             control: parse_addr(
                 "[daemon].control",
                 file.daemon
@@ -197,6 +199,13 @@ mod tests {
     fn accepts_a_byte_order_mark() {
         let s = Settings::parse("\u{feff}[processes]\nnames = [\"a.exe\"]\n").unwrap();
         assert_eq!(s.processes, ["a.exe"]);
+    }
+
+    #[test]
+    fn bad_regex_is_rejected() {
+        assert!(Settings::parse("[processes]
+names = [\"re:(\"]
+").is_err());
     }
 
     #[test]

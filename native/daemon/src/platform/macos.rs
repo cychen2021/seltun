@@ -450,7 +450,7 @@ mod tests {
                 Proto::Tcp,
                 client.local_addr().unwrap(),
                 Some(local),
-                &Matcher::new(&[name]),
+                &Matcher::new(&[name]).unwrap(),
             )
             .unwrap();
         assert_eq!(
@@ -464,7 +464,7 @@ mod tests {
                     Proto::Tcp,
                     client.local_addr().unwrap(),
                     Some(local),
-                    &Matcher::new(&["not-this-process"]),
+                    &Matcher::new(&["not-this-process"]).unwrap(),
                 )
                 .is_none()
         );

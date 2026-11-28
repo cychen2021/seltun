@@ -169,7 +169,7 @@ async fn start(settings: Settings) -> Result<Active> {
 
     let ctx = Arc::new(Context::new(
         settings.upstream.clone(),
-        Matcher::new(&settings.processes),
+        Matcher::new(&settings.processes)?,
         index,
     ));
     let (stop, stopped) = watch::channel(false);

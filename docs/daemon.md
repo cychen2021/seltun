@@ -33,7 +33,7 @@ Windows sends a flow into the adapter. The source address of the flow is then th
 
 - `GetExtendedTcpTable` and `GetExtendedUdpTable` give the pid of the process that owns the source socket. For TCP, the lookup uses the full 4-tuple. For UDP, it uses the local port.
 - `QueryFullProcessImageNameW` gives the path of the executable.
-- `Matcher` compares the path with the names or paths in the config file.
+- `Matcher` compares the path with the names, paths or regular expressions (`re:` entries) in the config file. A regular expression searches the file name and ignores case. The daemon and the CLI reject a regular expression that is not valid.
 - If the daemon does not find the owner of a flow, the flow counts as not selected. Examples are the flow of a system process and the flow of a closed socket.
 
 **Selected process, TCP:** The daemon sends a SOCKS5 `CONNECT` or an HTTP `CONNECT` to `[upstream].address` for the destination IP. The upstream proxy receives only IP addresses, because the process resolved the name before. Thus rules of the proxy that match a domain do not apply to this traffic.

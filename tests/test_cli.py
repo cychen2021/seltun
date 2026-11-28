@@ -272,3 +272,12 @@ def test_version_option(env):
     assert result.exit_code == 0
     assert result.output.strip() == f"seltun {__version__}"
     assert __version__ != "0.0.0+unknown"
+
+
+def test_bad_regex_in_processes_is_rejected(tmp_path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text('[processes]\nnames = ["re:(", "a.exe"]\n', encoding="utf-8")
+    with pytest.raises(SeltunError, match="regular expression"):
+        Config.load(cfg)
+    cfg.write_text("[processes]\nnames = ['re:^a.*\\.exe$']\n", encoding="utf-8")
+    assert Config.load(cfg).processes.names == [r"re:^a.*\.exe$"]

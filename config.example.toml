@@ -1,7 +1,7 @@
 # Config for `seltun` and its daemon `seltund`. The command `seltun init` copies this template to the config path of the user (`%APPDATA%\seltun\config.toml` on Windows, `~/Library/Application Support/seltun/config.toml` on macOS). Edit that copy. This file has no secrets. The switch state is in the data directory (`%LOCALAPPDATA%\seltun\state.json` on Windows, next to the config file on macOS).
 
 [processes]
-# The processes to steer. Write the file name of the executable (`哔哩哔哩.exe`) or the full path (`C:\Program Files\bilibili\哔哩哔哩.exe`). On macOS, write the file name of the executable in the app bundle (`firefox`), not the name of the app. Case does not matter. When seltun is on, all traffic goes through the daemon, but the daemon does not change the traffic of the other processes. seltun steers no process until you add a name to this list.
+# The processes to steer. Write the file name of the executable (`哔哩哔哩.exe`) the full path (`C:\Program Files\bilibili\哔哩哔哩.exe`), or a regular expression that starts with `re:` and searches the file name (`re:^chrome(_proxy)?\.exe$`). On macOS, write the file name of the executable in the app bundle (`firefox`), not the name of the app. Case does not matter. When seltun is on, all traffic goes through the daemon, but the daemon does not change the traffic of the other processes. seltun steers no process until you add a name to this list.
 names = []
 
 [upstream]

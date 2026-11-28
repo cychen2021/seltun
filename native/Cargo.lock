@@ -697,6 +697,7 @@ dependencies = [
  "ipstack",
  "libc",
  "libproc",
+ "regex",
  "serde",
  "serde_json",
  "tokio",

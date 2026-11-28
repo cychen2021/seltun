@@ -347,7 +347,7 @@ mod tests {
             protocol: Protocol::Socks5,
             udp: false,
         };
-        Context::new(upstream, Matcher::new(names), 0)
+        Context::new(upstream, Matcher::new(names).unwrap(), 0)
     }
 
     #[test]
