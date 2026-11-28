@@ -60,15 +60,16 @@ impl Context {
     }
 
     /// Proxy a flow only if the process that owns its source socket is selected. If the daemon does not find the owner, the flow goes direct.
-    pub fn verdict(&self, proto: Proto, src: SocketAddr, dst: SocketAddr) -> Verdict {
+    /// Fails if the matcher fails. The caller must then end the flow. A flow of a selected process must not go direct.
+    pub fn verdict(&self, proto: Proto, src: SocketAddr, dst: SocketAddr) -> Result<Verdict> {
         let remote = (proto == Proto::Tcp).then_some(dst);
-        match self.owners.selected(proto, src, remote, &self.matcher) {
+        Ok(match self.owners.selected(proto, src, remote, &self.matcher)? {
             Some(image) => {
                 tracing::debug!(%image, %src, %dst, ?proto, "proxy");
                 Verdict::Proxy
             },
             None => Verdict::Direct,
-        }
+        })
     }
 
     fn real_interface(&self) -> Option<u32> {
@@ -139,9 +140,16 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let probe = ctx.clone();
-    let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Tcp, src, dst))
+    let verdict = match tokio::task::spawn_blocking(move || probe.verdict(Proto::Tcp, src, dst))
         .await
-        .unwrap_or(Verdict::Direct);
+    {
+        Ok(Ok(verdict)) => verdict,
+        Ok(Err(error)) => {
+            tracing::error!(%src, %dst, "Flow ended: {error:#}");
+            return;
+        },
+        Err(_) => Verdict::Direct,
+    };
     // Windows tests each adapter for Internet access. If the test passes on the TUN adapter, Windows can make that adapter the main connection and show "LAN" instead of Wi-Fi. The daemon ends the test flow, so the test fails on this adapter only. The same test on the physical interface does not pass through the TUN adapter.
     let mut first = Vec::new();
     if verdict == Verdict::Direct && dst.port() == 80 {
@@ -209,9 +217,16 @@ where
         return;
     }
     let probe = ctx.clone();
-    let verdict = tokio::task::spawn_blocking(move || probe.verdict(Proto::Udp, src, dst))
+    let verdict = match tokio::task::spawn_blocking(move || probe.verdict(Proto::Udp, src, dst))
         .await
-        .unwrap_or(Verdict::Direct);
+    {
+        Ok(Ok(verdict)) => verdict,
+        Ok(Err(error)) => {
+            tracing::error!(%src, %dst, "Flow ended: {error:#}");
+            return;
+        },
+        Err(_) => Verdict::Direct,
+    };
     // If UDP does not go through the proxy, the DNS of a selected process goes direct, and the daemon drops its other UDP (QUIC, for example). The application then changes to TCP.
     let through_proxy = verdict == Verdict::Proxy && ctx.upstream.udp;
     if verdict == Verdict::Proxy && !through_proxy && dst.port() != 53 {
@@ -358,7 +373,7 @@ mod tests {
             "198.19.0.1:1".parse().unwrap(),
             "1.1.1.1:80".parse().unwrap(),
         );
-        assert_eq!(v, Verdict::Direct);
+        assert_eq!(v.unwrap(), Verdict::Direct);
     }
 
     #[test]

@@ -5,7 +5,6 @@ All keys are optional. If the file or a table is missing, seltun uses the defaul
 
 from __future__ import annotations
 
-import re
 import tomllib
 from dataclasses import dataclass, field, fields
 from ipaddress import IPv4Address
@@ -43,19 +42,8 @@ def _host_port(what: str, text: str) -> tuple[str, int]:
 
 @dataclass
 class ProcessesConfig:
-    #: File names of executables, full paths, or regular expressions (entries that start with ``re:``). A regular expression searches the file name. Case does not matter.
+    #: File names of executables, full paths, or regular expressions (entries that start with ``re:``). A regular expression searches the file name. Only the daemon checks it.
     names: list[str] = field(default_factory=list)
-
-    def validate(self) -> None:
-        for entry in self.names:
-            if not entry.strip().startswith("re:"):
-                continue
-            try:
-                re.compile(entry.strip().removeprefix("re:"))
-            except re.error as exc:
-                raise SeltunError(
-                    f"[processes].names has a regular expression that is not valid: {entry!r}. {exc}."
-                ) from None
 
 
 @dataclass
@@ -124,7 +112,6 @@ class Config:
             if not isinstance(value, dict) or key not in {f.name for f in fields(cls)}:
                 raise SeltunError(f"{path}: the key or table {key!r} is not known.")
             setattr(config, key, _table(getattr(config, key), key, value, path))
-        config.processes.validate()
         config.upstream.validate()
         config.tun.validate()
         config.daemon.host_port  # noqa: B018 -- validates

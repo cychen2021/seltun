@@ -134,15 +134,19 @@ pub struct Owners {
 const FRESH: Duration = Duration::from_millis(1000);
 const MISS_REFRESH: Duration = Duration::from_millis(20);
 
-fn running_selected(matcher: &Matcher) -> Vec<(u32, String)> {
+fn running_selected(matcher: &Matcher) -> anyhow::Result<Vec<(u32, String)>> {
     let Ok(pids) = pids_by_type(ProcFilter::All) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    pids.into_iter()
-        .filter(|&pid| pid != 0)
-        .filter_map(|pid| pidpath(pid as i32).ok().map(|path| (pid, path)))
-        .filter(|(_, path)| matcher.matches(path))
-        .collect()
+    let mut selected = Vec::new();
+    for pid in pids.into_iter().filter(|&pid| pid != 0) {
+        if let Ok(path) = pidpath(pid as i32)
+            && matcher.matches(&path)?
+        {
+            selected.push((pid, path));
+        }
+    }
+    Ok(selected)
 }
 
 fn find(rows: &[Row], proto: Proto, local: SocketAddr, remote: Option<SocketAddr>) -> bool {
@@ -168,9 +172,9 @@ impl Owners {
         local: SocketAddr,
         remote: Option<SocketAddr>,
         matcher: &Matcher,
-    ) -> Option<String> {
+    ) -> anyhow::Result<Option<String>> {
         if matcher.is_empty() {
-            return None;
+            return Ok(None);
         }
         let mut guard = self.selected.lock().unwrap_or_else(|e| e.into_inner());
         for attempt in 0..2 {
@@ -179,20 +183,20 @@ impl Owners {
                 if age <= FRESH || attempt == 1 {
                     for (pid, path) in &list.pids {
                         if find(&sockets(*pid), proto, local, remote) {
-                            return Some(path.clone());
+                            return Ok(Some(path.clone()));
                         }
                     }
                     if age <= MISS_REFRESH || attempt == 1 {
-                        return None;
+                        return Ok(None);
                     }
                 }
             }
             *guard = Some(Selected {
                 at: Instant::now(),
-                pids: running_selected(matcher),
+                pids: running_selected(matcher)?,
             });
         }
-        None
+        Ok(None)
     }
 }
 

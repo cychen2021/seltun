@@ -271,9 +271,11 @@ impl Owners {
         local: SocketAddr,
         remote: Option<SocketAddr>,
         matcher: &Matcher,
-    ) -> Option<String> {
-        self.image(proto, local, remote)
-            .filter(|image| matcher.matches(image))
+    ) -> anyhow::Result<Option<String>> {
+        match self.image(proto, local, remote) {
+            Some(image) => Ok(matcher.matches(&image)?.then_some(image)),
+            None => Ok(None),
+        }
     }
 }
 

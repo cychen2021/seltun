@@ -30,8 +30,8 @@ impl Owners {
         _local: SocketAddr,
         _remote: Option<SocketAddr>,
         _matcher: &Matcher,
-    ) -> Option<String> {
-        None
+    ) -> anyhow::Result<Option<String>> {
+        Ok(None)
     }
 }
 
